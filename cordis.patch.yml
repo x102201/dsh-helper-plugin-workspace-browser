@@ -1,0 +1,25 @@
+# dsh-helper-plugin-workspace-browser 的 bundle patch。
+#
+# package.json 的 `dsh.bundle.patch` 指向本文件，所以把这个包装进 profile
+# bundle 就够了：
+#
+#   dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-browser
+#
+# `dsh plugin ... add` 会按已安装状态重建 `dsh.profile.bundles`，本包因此自动
+# 进入层栈，不需要手改 profile 清单。装完重启 `dsh --profile web`（或 `dsh web`）。
+#
+# ⚠️ 如果 profile 自带的 `cordis.patch.yml` 里已经 insert 了同一个 id
+# （`workspace-browser`），启动会报 `duplicate loader entry id`。这时把那边
+# 的 insert 去掉，只留本文件这一处。
+#
+# `name: ./index.js` 由 dsh-app-boot 的 anchorInsertedPluginNames 锚定到
+# **本文件所在目录**，因此 pnpm store 副本、`link:` 符号链接、`github:` 检出
+# 三种安装方式都能正确解析。
+#
+# 这一行是宿主平面（host plane）：工具注册、HTTP 路由、设置命名空间、斜杠命令
+# 都在宿主服务上。浏览器半边不在这里 —— 它是 package.json 的 `dsh.client`
+# 声明，由 dsh-client-modules 扫描并作为 ModuleLoader bundle 提供。
+
+- insert:
+    - id: workspace-browser
+      name: ./index.js

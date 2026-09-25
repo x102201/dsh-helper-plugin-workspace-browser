@@ -1,0 +1,69 @@
+{
+  "name": "dsh-helper-plugin-workspace-browser",
+  "version": "0.1.0",
+  "description": "dsh plugin: 给当前工作区起一个带调试端口的真实 Chrome —— 胶囊管开关与状态，右侧栏管看画面，模型用 workspace_browser_* 工具操作页面。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "browser",
+    "chrome",
+    "cdp",
+    "screencast",
+    "cordis",
+    "ai-agent"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/x102201/dsh-helper-plugin-workspace-browser.git"
+  },
+  "bugs": {
+    "url": "https://github.com/x102201/dsh-helper-plugin-workspace-browser/issues"
+  },
+  "homepage": "https://github.com/x102201/dsh-helper-plugin-workspace-browser#readme",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./lib/*": "./lib/*",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "DESIGN.zh.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node scripts/check-encoding.mjs && node test/smoke.test.mjs && node test/host.test.mjs && node test/cdp.test.mjs && node test/tools.test.mjs && node test/write-tools.test.mjs && node test/screencast.test.mjs && node test/stream.test.mjs && node test/command.test.mjs && node test/model.test.mjs",
+    "test:encoding": "node scripts/check-encoding.mjs",
+    "verify:p0": "node scripts/verify-p0.mjs",
+    "verify:live": "node scripts/verify-live.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "private": false
+}

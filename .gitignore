@@ -1,0 +1,6 @@
+# 临时验证目录（scripts/verify-*.mjs 用）
+.tmp-*/
+
+# 依赖与日志
+node_modules/
+*.log
