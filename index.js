@@ -340,7 +340,7 @@ export function apply(ctx, config) {
       sharedClientWsPath = wantWsPath;
       const created = createCdpClient({
         getEndpoint: () => instance.endpoint,
-        profileDir: instance.profileDir,
+        getProfileDir: () => instance.dataDir,
         info,
         warn,
         onClosed: (payload) => {

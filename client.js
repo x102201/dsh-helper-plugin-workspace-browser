@@ -123,6 +123,7 @@ window.__ModuleLoader__.load({
         skillUsageLabel: 'Skill',
         skillMenuOpen: '查看',
         skillMenuReveal: '在文件资源管理器中显示',
+        skillMenuDelete: '删除',
         skillEmpty: '还没有技能。',
         mirrorCloseTab: '关闭标签',
         mirrorCopyUrl: '复制 URL',
@@ -168,6 +169,7 @@ window.__ModuleLoader__.load({
         skillUsageLabel: 'Skill',
         skillMenuOpen: 'Open',
         skillMenuReveal: 'Show in File Explorer',
+        skillMenuDelete: 'Delete',
         skillEmpty: 'No skills yet.',
         allowed: 'Allowed',
         chromeMissingTitle: 'Chrome not found',
@@ -2032,6 +2034,15 @@ window.__ModuleLoader__.load({
           })
           .catch((error) => setNote(error instanceof Error ? error.message : String(error)));
       }
+      function removeSkill(name) {
+        setSkillMenu(null);
+        void callControl('/skills', { method: 'DELETE', body: { name } })
+          .then(() => {
+            skillsKeyRef.current = '';
+            return reloadSkills();
+          })
+          .catch((error) => setNote(error instanceof Error ? error.message : String(error)));
+      }
 
       // 「只有可见时才连接」：`tab.visible` 由框架给，含浮出的面板（§5／§7）。
       // 拿不到 useTabInfo（老宿主、测试）时按可见处理 —— 功能不因此消失。
@@ -2762,13 +2773,20 @@ window.__ModuleLoader__.load({
                 },
                 { key: 'open', label: t('skillMenuOpen'), title: '转到工作区文件夹并打开文件', onClick: () => locateSkill(skillMenu.name, 'open') },
                 { key: 'reveal', label: t('skillMenuReveal'), onClick: () => locateSkill(skillMenu.name, 'reveal') },
+                { key: 'delete', label: t('skillMenuDelete'), danger: true, onClick: () => removeSkill(skillMenu.name) },
               ].map((item) => React.createElement(
                 'button',
                 {
                   key: item.key,
                   type: 'button',
                   title: item.title,
-                  style: { ...MIRROR_BUTTON, display: 'block', width: '100%', textAlign: 'left' },
+                  style: {
+                    ...MIRROR_BUTTON,
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    color: item.danger ? 'var(--dsw-alias-state-danger-primary, #c0392b)' : MIRROR_BUTTON.color,
+                  },
                   onClick: item.onClick,
                 },
                 item.label,

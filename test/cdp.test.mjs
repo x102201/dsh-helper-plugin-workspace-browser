@@ -10,6 +10,9 @@
  */
 
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -412,6 +415,54 @@ test('宿主记住的 wsPath 过期时，以 /json/version 的实时路径为准
     client.pages().map((page) => page.targetId),
     ['TAB-1', 'TAB-2'],
   );
+});
+
+test('宿主端口优先于另一份目录里过期的 DevToolsActivePort', async (t) => {
+  const fake = await startFakeChrome();
+  const staleDir = mkdtempSync(join(tmpdir(), 'wb-stale-port-'));
+  writeFileSync(join(staleDir, 'DevToolsActivePort'), '1\n/devtools/browser/stale\n');
+  const client = createCdpClient({
+    getEndpoint: () => ({ port: fake.port, wsPath: '' }),
+    profileDir: staleDir,
+    connectTimeoutMs: 2000,
+    commandTimeoutMs: 2000,
+  });
+  t.after(async () => {
+    client.close('test-over');
+    await fake.close();
+    rmSync(staleDir, { recursive: true, force: true });
+  });
+
+  await client.connect();
+  assert.equal(client.isConnected(), true, '过期端口文件不能把连接从宿主正在用的调试口上带走');
+  assert.equal(client.port, fake.port);
+});
+
+test('getProfileDir 指向的目录才用来读 DevToolsActivePort', async (t) => {
+  const fake = await startFakeChrome();
+  const wrongDir = mkdtempSync(join(tmpdir(), 'wb-wrong-profile-'));
+  const rightDir = mkdtempSync(join(tmpdir(), 'wb-right-profile-'));
+  mkdirSync(wrongDir, { recursive: true });
+  writeFileSync(join(wrongDir, 'DevToolsActivePort'), '1\n/devtools/browser/stale\n');
+  writeFileSync(join(rightDir, 'DevToolsActivePort'), `${fake.port}\n${fake.wsPath}\n`);
+  const client = createCdpClient({
+    getEndpoint: () => ({ port: 0, wsPath: '' }),
+    profileDir: wrongDir,
+    getProfileDir: () => rightDir,
+    connectTimeoutMs: 2000,
+    commandTimeoutMs: 2000,
+  });
+  t.after(async () => {
+    client.close('test-over');
+    await fake.close();
+    rmSync(wrongDir, { recursive: true, force: true });
+    rmSync(rightDir, { recursive: true, force: true });
+  });
+
+  assert.equal(client.hasEndpointHint(), true);
+  await client.connect();
+  assert.equal(client.isConnected(), true);
+  assert.equal(client.port, fake.port);
 });
 
 test('没有端点线索时不假装能连（hasEndpointHint 为 false）', async (t) => {

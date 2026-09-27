@@ -78,9 +78,11 @@ test('查看打开技能文件，资源管理器只选中这个文件', () => {
     assert.equal(calls.length, 2);
     if (process.platform === 'win32') {
       assert.equal(calls[0].command, 'cmd.exe');
-      assert.match(calls[0].args.at(-1), /汇率对比\.md/);
+      assert.deepEqual(calls[0].args.slice(0, 4), ['/d', '/c', 'start', '']);
+      assert.match(calls[0].args[4], /汇率对比\.md$/);
       assert.equal(calls[1].command, 'explorer.exe');
-      assert.match(calls[1].args[0], /^\/select,/);
+      assert.match(calls[1].args[0], /^\/select,"/);
+      assert.match(calls[1].args[0], /汇率对比\.md"$/);
     }
     assert.equal(presentSkillFile(root, '../outside', 'open', { spawn }).ok, false);
   } finally {
