@@ -133,9 +133,7 @@ Chrome 是否装好，是另一路信息，不塞进这五个词里。胶囊文�
 
 冷启动时窗口出现。已经在运行时，模型再开的标签用后台方式，不抢焦点。用户点「切到前台」是画面上单独的一个按钮。
 
-第 4 步或冷启动要恢复标签时：有记住的网址就不带 `about:blank`，也不加 `--restore-last-session`。第一个页面在前台，其余在后台。没有可恢复的网址时才开 `about:blank`。
-
-`lastKnownTabs` 最多 20 条，跳过 `about:blank` 和 `chrome://`。只在用户再次启动且 `instance.restoreTabsOnReopen` 为开时使用。关窗不会自动用它重开。
+冷启动不在命令行上加网址，也不加 `--restore-last-session`。起始页和「继续浏览上次打开的网页」用这份用户数据目录里 Chrome 自己的设置。第 4 步只在进程还活着但没有页面时开一张新标签页。
 
 ### 关窗
 
@@ -274,7 +272,7 @@ DSH 退出时浏览器默认继续活着（`instance.onDshExit = keep`）。可�
 
 新增和修改都在输入框里完成，胶片条下面不填表。用户输入 `/browser 新增技能` 或 `/browser 新增skill`、`/browser 保存技能` 或 `/browser 保存skill`、`/browser 修改技能` 或 `/browser 修改skill`，后面可以再带名字或补充。这些字只是线索。模型先复述意图（新建、把刚才的操作存下来，还是改已有技能），列出准备采用的名字和步骤，用户同意之后才调用 `workspace_browser_save_skill`（`confirm: true`）。修改用同一个名字覆盖。
 
-胶片条和技能区之间有分隔条，高度写入 `panelSkillHeight`（默认 72，40–360）。说明收在「Skill」上，鼠标停上去才展开。名字横排换行，停在名字上会变色。右键菜单向上展开，避免被底边挡住：加入对话、查看（打开工作区里的技能文件）、在文件资源管理器中显示、删除（删掉这个技能文件）。画面可见时大约每两秒重新读取名单，模型保存或修改之后右侧栏自己更新。输入框 `@` 插入同一张芯片：脸上只有技能名，发给模型时才展开全文。芯片不自动发送。评论和发送默认先停下来等用户确认。
+胶片条和技能区之间有分隔条，高度写入 `panelSkillHeight`（默认 72，40–360）。说明收在「Skill」上，鼠标停上去才展开。名字横排换行，停在名字上会变色。右键菜单向上展开，避免被底边挡住：加入对话、查看（在侧边栏打开技能文件）、在文件资源管理器中显示、删除（删掉这个技能文件）。画面可见时大约每两秒重新读取名单，模型保存或修改之后右侧栏自己更新。输入框 `@` 插入同一张芯片：脸上只有技能名，发给模型时才展开全文。芯片不自动发送。评论和发送默认先停下来等用户确认。
 
 没装 Chrome、版本过低时，错误码是 `chrome-not-installed`、`chrome-version-unsupported`，带人话和 `hint.actions`（`install` / `set-path` / `recheck`）。实例未启动是 `browser-not-running`。启动过程失败是 `chrome-launch-failed`。
 
@@ -342,7 +340,7 @@ DSH 退出时浏览器默认继续活着（`instance.onDshExit = keep`）。可�
 | POST | `/delete-data` | 停止并删除这个工作区的 profile 目录 |
 | GET | `/targets` | 标签列表，无会话归属 |
 | GET | `/skills` | 技能名单；`?name=` 取全文和发给模型的展开文本 |
-| POST | `/skills/locate` | body `{ name, action }`。`open` 打开技能文件，`reveal` 在文件资源管理器中选中 |
+| POST | `/skills/locate` | body `{ name, action }`。`path` 只返回路径（侧边栏查看），`open` 用系统程序打开，`reveal` 在文件资源管理器中选中 |
 | POST | `/skills` | 确认后保存技能（body 里 `confirm: true`） |
 | DELETE | `/skills` | 删除一个技能 |
 
@@ -446,7 +444,7 @@ chrome.exe
   --hide-crash-restore-bubble
 ```
 
-有标签要恢复时，不要在命令行上加 URL，也不要 `--restore-last-session`。没有可恢复标签时才加 `about:blank`。跨域的两个参数见第 4 节。
+命令行不加网址，也不加 `--restore-last-session`，好让 Chrome 自己的起始页设置生效。跨域的两个参数见第 4 节。
 
 Windows 上 `spawn` 使用 `detached: true`、`stdio: 'ignore'`，并 `unref()`。否则宿主退不掉，或者浏览器跟着宿主一起退出。
 
@@ -501,8 +499,6 @@ Chrome 136 起，调试端口必须配非默认的 `--user-data-dir`。`--remote
 | `streamThumbFps` / `streamThumbMaxWidth` / `streamThumbQuality` | `0.25` / `160` / `50` | 帧率为 0 表示不要缩略图 |
 | `chromePath` | 空 | 手动指定的 chrome.exe |
 | `chromeCrossOrigin` | 关 | 见第 4 节的两个参数 |
-| `instanceRestoreTabsOnReopen` | 开 | 再次启动时恢复标签 |
-| `startupUrl` | 空 | 没有可恢复标签时打开的网址，留空则是空白页 |
 | `instanceOnDshExit` | `keep` | `keep` 或 `close` |
 | `toolsWriteRequireApproval` | 关 | 打开后，写操作要先点「允许模型操作」 |
 | `toolsWriteAuthorized` | 关 | 点过允许之后为开 |
@@ -546,10 +542,10 @@ CDP 客户端和读类工具，含 `select_tab`。模型能拿到页面文字和
 
 ### P4 关窗和恢复
 
-500 毫秒防抖、还连着进程时下次走「开窗口」而不是再 spawn、恢复标签时不多出 `about:blank`、不弹出崩溃恢复条。
+500 毫秒防抖、还连着进程时下次走「开窗口」而不是再 spawn、不弹出崩溃恢复条。起始页由 Chrome 自己的设置决定。
 
 - 手动关掉窗口后显示未启动，不自动出现。
-- 再点「启动」，窗口出现；若开了恢复，原来的网址回来，没有多出来的空白页。
+- 再点「启动」，窗口出现。开了哪些页，跟浏览器设置里的起始页一致。
 
 ### P5 命令和设置页
 

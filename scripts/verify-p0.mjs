@@ -18,7 +18,7 @@ import { devToolsActivePortPathOf, readDevToolsActivePort, readEndpoint } from '
 import { normalizeSettings } from '../lib/settings.js';
 
 const root = join(process.cwd(), '.tmp-verify');
-const settings = normalizeSettings({ instanceRestoreTabsOnReopen: false });
+const settings = normalizeSettings({});
 
 /** @type {string[]} */
 const failures = [];

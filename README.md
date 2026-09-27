@@ -92,7 +92,7 @@ dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-
 胶片条下面是技能名字，横排，放不下就换行。鼠标停在名字上会变色。右键可以：
 
 - **加入对话**：把名字放进输入框，不自动发送
-- **查看**：打开这个技能文件
+- **查看**：在侧边栏打开这个技能文件
 - **在文件资源管理器中显示**：在系统文件管理器里选中它
 - **删除**：删掉这个技能文件
 
@@ -173,8 +173,6 @@ dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-
 | `userDataDir` | 空 | 留空用工作区自己的目录。填了就用这份已经登录过的用户数据目录 |
 | `debugPort` | `0` | 0 为自动分配。填了就连接这个端口；端口上已有窗口就直接用 |
 | `chromeCrossOrigin` | 关 | 打开后加上关闭站点隔离的启动参数，并重启实例 |
-| `startupUrl` | 空 | 没有可恢复标签时打开的网址。空则是空白页 |
-| `instanceRestoreTabsOnReopen` | 开 | 有记住的标签就只打开那些，不再加空白页。没有时才开 about:blank |
 | `instanceOnDshExit` | `keep` | `keep` 留下本插件启动的浏览器，`close` 随 DSH 退出关掉。接到已有调试窗口时不关 |
 
 画面、胶囊相关的项在点保存后马上生效。用户数据目录、调试端口、跨域和退出行为在下次启动这个浏览器时生效。

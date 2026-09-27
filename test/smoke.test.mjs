@@ -237,23 +237,6 @@ test('页面过滤：排除 devtools、扩展页与浏览器内部 UI', () => {
   );
 });
 
-test('启动网址：有标签不加空白页，没有标签才开 about:blank', async () => {
-  const { startupTargets } = await import('../lib/instance.js');
-  assert.deepEqual(
-    startupTargets({ tabs: ['https://example.com/a', 'about:blank'], restore: true }),
-    ['https://example.com/a'],
-  );
-  assert.deepEqual(startupTargets({ tabs: [], restore: true }), ['about:blank']);
-  assert.deepEqual(
-    startupTargets({ tabs: ['https://example.com/a'], restore: false, startupUrl: '' }),
-    ['about:blank'],
-  );
-  assert.deepEqual(
-    startupTargets({ tabs: [], restore: true, startupUrl: 'https://example.com/start' }),
-    ['https://example.com/start'],
-  );
-});
-
 test('胶片条过滤 about:blank，并按 /json/list 顺序重排', async () => {
   const { filmstripTargets, isAboutBlankUrl, orderPagesByIds, pageTargets } = await import('../lib/instance.js');
   assert.equal(isAboutBlankUrl('about:blank'), true);
@@ -323,7 +306,7 @@ test('心跳：/json/list 失败不算关窗；端口文件还在时保持运行
   const instance = createInstanceManager({
     browserRoot,
     workspaceKey: 'test-ws',
-    getSettings: () => ({ chromePath: '', chromeCrossOrigin: false, instanceRestoreTabsOnReopen: false }),
+    getSettings: () => ({ chromePath: '', chromeCrossOrigin: false }),
     warn: () => {},
     info: () => {},
   });

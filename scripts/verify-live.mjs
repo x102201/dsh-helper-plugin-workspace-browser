@@ -30,7 +30,7 @@ try {
 }
 
 const root = join(process.cwd(), '.tmp-live');
-const settings = normalizeSettings({ instanceRestoreTabsOnReopen: false, toolsWriteAuthorized: true });
+const settings = normalizeSettings({ toolsWriteAuthorized: true });
 
 const failures = [];
 let step = 0;

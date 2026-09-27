@@ -790,9 +790,27 @@ window.__ModuleLoader__.load({
       const { store, t, locale, sessionId, requestPanelOpen } = props;
       const snapshot = useStatus(store);
       const [open, setOpen] = React.useState(false);
+      const rootRef = React.useRef(null);
       const [busy, setBusy] = React.useState('');
       const [note, setNote] = React.useState('');
       const [confirmStop, setConfirmStop] = React.useState(false);
+      React.useEffect(() => {
+        if (!open) return undefined;
+        const closeOutside = (event) => {
+          if (rootRef.current?.contains(event.target) === true) return;
+          setOpen(false);
+        };
+        const onKey = (event) => {
+          if (event.key === 'Escape') setOpen(false);
+        };
+        document.addEventListener('mousedown', closeOutside);
+        document.addEventListener('keydown', onKey);
+        return () => {
+          document.removeEventListener('mousedown', closeOutside);
+          document.removeEventListener('keydown', onKey);
+        };
+      }, [open]);
+
       const value = snapshot.value;
       const capsule = describeCapsule(value, t);
       const color = TONE_COLOR[capsule.tone] ?? 'currentColor';
@@ -1024,7 +1042,16 @@ window.__ModuleLoader__.load({
 
       return React.createElement(
         'div',
-        { style: { position: 'relative', display: 'inline-flex' }, 'data-locale': locale },
+        {
+          ref: rootRef,
+          style: { position: 'relative', display: 'inline-flex' },
+          'data-locale': locale,
+          onBlur: (event) => {
+            const next = event.relatedTarget;
+            if (!(next instanceof Node) || rootRef.current?.contains(next) === true) return;
+            setOpen(false);
+          },
+        },
         React.createElement(
           'button',
           {
@@ -1997,7 +2024,7 @@ window.__ModuleLoader__.load({
      * @returns {object} React 元素。
      */
     function MirrorBody(props) {
-      const { store, t, insertTabChip, insertSkillChip } = props;
+      const { store, t, insertTabChip, insertSkillChip, openSkillInSidebar } = props;
       const sessionId = typeof props.sessionId === 'string' ? props.sessionId : '';
       const snapshot = useStatus(store);
       const value = snapshot.value;
@@ -2031,6 +2058,21 @@ window.__ModuleLoader__.load({
         void callControl('/skills/locate', { method: 'POST', body: { name, action } })
           .then((payload) => {
             if (payload?.ok !== true) setNote(payload?.error || t('mirrorActionFailed'));
+          })
+          .catch((error) => setNote(error instanceof Error ? error.message : String(error)));
+      }
+      function viewSkill(name) {
+        setSkillMenu(null);
+        void callControl('/skills/locate', { method: 'POST', body: { name, action: 'path' } })
+          .then((payload) => {
+            if (payload?.ok !== true || typeof payload.file !== 'string' || payload.file === '') {
+              setNote(payload?.error || t('mirrorActionFailed'));
+              return;
+            }
+            const opened = typeof openSkillInSidebar === 'function'
+              ? openSkillInSidebar(sessionId, payload.file)
+              : { ok: false };
+            if (opened?.ok !== true) setNote(t('mirrorActionFailed'));
           })
           .catch((error) => setNote(error instanceof Error ? error.message : String(error)));
       }
@@ -2771,7 +2813,7 @@ window.__ModuleLoader__.load({
                     setNote(result?.ok ? t('mirrorAssignDone') : t('mirrorAssignNoInput'));
                   },
                 },
-                { key: 'open', label: t('skillMenuOpen'), title: '转到工作区文件夹并打开文件', onClick: () => locateSkill(skillMenu.name, 'open') },
+                { key: 'open', label: t('skillMenuOpen'), title: '在侧边栏打开', onClick: () => viewSkill(skillMenu.name) },
                 { key: 'reveal', label: t('skillMenuReveal'), onClick: () => locateSkill(skillMenu.name, 'reveal') },
                 { key: 'delete', label: t('skillMenuDelete'), danger: true, onClick: () => removeSkill(skillMenu.name) },
               ].map((item) => React.createElement(
@@ -2823,8 +2865,6 @@ window.__ModuleLoader__.load({
       userDataDir: '',
       debugPort: 0,
       chromeCrossOrigin: false,
-      startupUrl: '',
-      instanceRestoreTabsOnReopen: true,
       instanceOnDshExit: 'keep',
     };
 
@@ -2845,8 +2885,6 @@ window.__ModuleLoader__.load({
       { key: 'userDataDir', kind: 'string', group: 'browser' },
       { key: 'debugPort', kind: 'int', min: 0, max: 65535, group: 'browser' },
       { key: 'chromeCrossOrigin', kind: 'bool', group: 'browser' },
-      { key: 'startupUrl', kind: 'string', group: 'instance' },
-      { key: 'instanceRestoreTabsOnReopen', kind: 'bool', group: 'instance' },
       { key: 'instanceOnDshExit', kind: 'enum', options: ['keep', 'close'], group: 'instance' },
     ];
 
@@ -2891,10 +2929,6 @@ window.__ModuleLoader__.load({
         streamThumbQualityHint: '1–100',
         chromeCrossOrigin: '跨域',
         chromeCrossOriginHint: '加 --disable-web-security 等参数；切换会重启实例并关掉已打开标签',
-        startupUrl: '默认起始页',
-        startupUrlHint: '没有可恢复的标签、也没有下面这项时才用它；留空则开 about:blank',
-        instanceRestoreTabsOnReopen: '再次启动时恢复标签',
-        instanceRestoreTabsOnReopenHint: '有记住的标签就只打开那些，不再加空白页。一个都没有时才开 about:blank',
         instanceOnDshExit: 'DSH 退出时',
         instanceOnDshExitHint: 'keep = 本插件启动的浏览器继续活着；close = 退出 DSH 时关掉它。接到已有调试窗口时不会关',
         saving: '保存中…',
@@ -2949,10 +2983,6 @@ window.__ModuleLoader__.load({
         streamThumbQualityHint: '1–100',
         chromeCrossOrigin: 'Cross-origin',
         chromeCrossOriginHint: 'Adds --disable-web-security; toggling restarts the instance and closes open tabs',
-        startupUrl: 'Start page',
-        startupUrlHint: 'Used only when there is nothing to restore; empty means about:blank',
-        instanceRestoreTabsOnReopen: 'Restore tabs on next start',
-        instanceRestoreTabsOnReopenHint: 'Remembered tabs open alone, with no extra blank page. about:blank is used only when there are none',
         instanceOnDshExit: 'When DSH exits',
         instanceOnDshExitHint: 'keep = leave the browser this plugin started; close = shut it down on exit. An already-open debug window is left alone',
         saving: 'Saving…',
@@ -3434,6 +3464,40 @@ window.__ModuleLoader__.load({
       };
     }
 
+    /**
+     * 侧边栏文件地址。和宿主打开文件芯片用的是同一种 `dsh-resource://file/session/…`。
+     *
+     * @param {string} sessionId - 当前会话。
+     * @param {string} filePath - 技能文件的绝对路径。
+     * @returns {string} 地址。
+     */
+    function skillFileAddress(sessionId, filePath) {
+      const encodeSegment = (segment) => encodeURIComponent(segment).replace(/%3A/gi, ':');
+      const encoded = String(filePath).replace(/\\/g, '/').split('/').map(encodeSegment).join('/');
+      return `dsh-resource://file/session/${encodeSegment(sessionId)}/${encoded}`;
+    }
+
+    /**
+     * 在当前会话的侧边栏打开技能文件，不调用系统关联程序。
+     *
+     * @param {object} ctx - 客户端上下文。
+     * @param {string} sessionId - 当前会话。
+     * @param {string} filePath - 绝对路径。
+     * @returns {{ ok: boolean, error?: string }} 是否交给了侧边栏。
+     */
+    function openSkillInSidebar(ctx, sessionId, filePath) {
+      const sidebarRight = typeof ctx.get === 'function' ? ctx.get('sidebarRight') : undefined;
+      if (!sidebarRight || typeof sidebarRight.openResource !== 'function') return { ok: false, error: 'no-sidebar' };
+      if (typeof sessionId !== 'string' || sessionId === '') return { ok: false, error: 'no-session' };
+      if (typeof filePath !== 'string' || filePath === '') return { ok: false, error: 'no-file' };
+      try {
+        sidebarRight.openResource(skillFileAddress(sessionId, filePath));
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+
     /** 注册右侧栏 tab 类型与正文。 */
     function attachPane(ctx, store, t, locale, insertTabChip, insertSkillChip) {
       const tabs = typeof ctx.get === 'function' ? ctx.get('sidebarRightTabs') : undefined;
@@ -3459,7 +3523,13 @@ window.__ModuleLoader__.load({
               name: PANE_TAB_SLOT,
               key: TAB_ID,
               ...(locale === undefined ? {} : { locale: LOCALE_NS }),
-              inject: () => ({ store, t, insertTabChip, insertSkillChip }),
+              inject: () => ({
+                store,
+                t,
+                insertTabChip,
+                insertSkillChip,
+                openSkillInSidebar: (sessionId, filePath) => openSkillInSidebar(ctx, sessionId, filePath),
+              }),
             },
             MirrorBody,
           ),

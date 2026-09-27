@@ -61,7 +61,7 @@ test('保存技能工具：没确认不落盘，确认后写入名单', () => {
   }
 });
 
-test('查看打开技能文件，资源管理器只选中这个文件', () => {
+test('取路径不启动程序；系统打开和资源管理器选中仍然分开', () => {
   const root = mkdtempSync(join(tmpdir(), 'wb-skill-file-'));
   try {
     assert.equal(saveSkill(root, { name: '汇率对比', steps: '打开搜索框', confirm: true }).ok, true);
@@ -70,6 +70,10 @@ test('查看打开技能文件，资源管理器只选中这个文件', () => {
       calls.push({ command, args });
       return { unref() {} };
     };
+    const located = presentSkillFile(root, '汇率对比', 'path', { spawn });
+    assert.equal(located.ok, true);
+    assert.match(located.file, /汇率对比\.md$/);
+    assert.equal(calls.length, 0, '只取路径时不能启动系统程序');
     const opened = presentSkillFile(root, '汇率对比', 'open', { spawn });
     assert.equal(opened.ok, true);
     assert.match(opened.file, /汇率对比\.md$/);
