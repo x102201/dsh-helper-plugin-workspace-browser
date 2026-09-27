@@ -27,7 +27,6 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { createCdpClient } from '../lib/cdp.js';
-import { FIELD_DEFAULTS } from '../lib/settings.js';
 import { ERROR_CODES, TOOL_PREFIX, toPageExpression } from '../lib/tools.js';
 import { createWriteTools, pageWriteActionForTest, registerWriteTools, WRITE_ERROR_CODES, WRITE_TOOL_NAMES } from '../lib/write-tools.js';
 import { startFakeChrome } from './helpers/fake-chrome.mjs';
@@ -239,10 +238,6 @@ test('授权门只看设置：requireApproval 关掉或读不到设置时放行'
   // ② 没有任何设置来源：默认直接放行。
   const bare = createWriteTools({ instance: runningInstance(fake) });
   assert.equal(bare.authorize(), true, '读不到设置时按默认放行');
-
-  // ③ 默认值本身：不再要求授权。
-  assert.equal(FIELD_DEFAULTS.toolsWriteRequireApproval, false);
-  assert.equal(FIELD_DEFAULTS.toolsWriteAuthorized, false);
 
   open.dispose();
   bare.dispose();

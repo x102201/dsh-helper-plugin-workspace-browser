@@ -858,15 +858,9 @@ window.__ModuleLoader__.load({
       } else if (state === 'idle') {
         rows.push(
           button(t('start'), () => {
-            // `too-old` / `ambiguous` 要用户先处理，挡下来并说明；
-            // `missing` 仍然放行 —— 宿主会在真正启动前做一次彻底探测（注册表 + PATH），
-            // 说不定快速探测没找到而它找得到；失败了也有明确原因可看。
+            // `too-old` 挡下来并说明。`missing` 仍然放行：宿主启动前还会再探测一次。
             if (chromeState === 'too-old') {
               setNote(t('chromeTooOld')(value.chrome.version, value.chrome.minVersion));
-              return;
-            }
-            if (chromeState === 'ambiguous') {
-              setNote(t('chromeAmbiguous')((value.chrome.candidates ?? []).length));
               return;
             }
             startThenCollapse('start', async () => {
@@ -2799,7 +2793,6 @@ window.__ModuleLoader__.load({
       capsuleEnabled: true,
       capsuleShowPort: true,
       panelAutoOpenOnLaunch: true,
-      panelLayout: 'focus',
       panelTileSplit: 0.55,
       panelSkillHeight: 72,
       panelFollowFrontTab: false,
@@ -2809,14 +2802,12 @@ window.__ModuleLoader__.load({
       streamThumbFps: 0.25,
       streamThumbMaxWidth: 160,
       streamThumbQuality: 50,
-      chromePath: '',
+      userDataDir: '',
+      debugPort: 0,
       chromeCrossOrigin: false,
       startupUrl: '',
       instanceRestoreTabsOnReopen: true,
       instanceOnDshExit: 'keep',
-      toolsWriteRequireApproval: false,
-      toolsWriteAuthorized: false,
-      toolsExposeEvaluate: false,
     };
 
     /** 字段表：顺序即展示顺序，`group` 决定分组标题。 */
@@ -2824,7 +2815,6 @@ window.__ModuleLoader__.load({
       { key: 'capsuleEnabled', kind: 'bool', group: 'capsule' },
       { key: 'capsuleShowPort', kind: 'bool', group: 'capsule' },
       { key: 'panelAutoOpenOnLaunch', kind: 'bool', group: 'panel' },
-      { key: 'panelLayout', kind: 'enum', options: ['focus', 'grid', 'single'], group: 'panel' },
       { key: 'panelTileSplit', kind: 'number', min: 0.15, max: 0.85, group: 'panel' },
       { key: 'panelSkillHeight', kind: 'int', min: 40, max: 360, group: 'panel' },
       { key: 'panelFollowFrontTab', kind: 'bool', group: 'panel' },
@@ -2834,14 +2824,12 @@ window.__ModuleLoader__.load({
       { key: 'streamThumbFps', kind: 'number', min: 0, max: 1, group: 'stream' },
       { key: 'streamThumbMaxWidth', kind: 'int', min: 64, max: 640, group: 'stream' },
       { key: 'streamThumbQuality', kind: 'int', min: 1, max: 100, group: 'stream' },
-      { key: 'chromePath', kind: 'string', group: 'chrome' },
-      { key: 'chromeCrossOrigin', kind: 'bool', group: 'chrome' },
+      { key: 'userDataDir', kind: 'string', group: 'browser' },
+      { key: 'debugPort', kind: 'int', min: 0, max: 65535, group: 'browser' },
+      { key: 'chromeCrossOrigin', kind: 'bool', group: 'browser' },
       { key: 'startupUrl', kind: 'string', group: 'instance' },
       { key: 'instanceRestoreTabsOnReopen', kind: 'bool', group: 'instance' },
       { key: 'instanceOnDshExit', kind: 'enum', options: ['keep', 'close'], group: 'instance' },
-      { key: 'toolsWriteRequireApproval', kind: 'bool', group: 'tools' },
-      { key: 'toolsWriteAuthorized', kind: 'bool', group: 'tools' },
-      { key: 'toolsExposeEvaluate', kind: 'bool', group: 'tools' },
     ];
 
     /** 卡片自己的文案（与胶囊分开，避免键名打架）。 */
@@ -2849,27 +2837,28 @@ window.__ModuleLoader__.load({
       zh: {
         title: '工作区浏览器',
         subtitle: 'dsh-helper-plugin-workspace-browser',
-        intro: '给当前工作区起一个带调试端口的真实 Chrome。改动即时生效；标了「需重启」的项会在下次启动实例时生效。',
+        intro: '给当前工作区起一个带调试端口的真实 Chrome。改完要点保存；标了「需重启」的项在下次启动实例时生效。',
         groupCapsule: '胶囊',
         groupPanel: '画面',
         groupStream: '帧率与质量',
-        groupChrome: 'Chrome',
+        groupBrowser: '浏览器',
         groupInstance: '实例',
-        groupTools: '模型工具',
         capsuleEnabled: '显示胶囊',
         capsuleEnabledHint: '输入框那一行的入口按钮；关掉后仍可用会话头部按钮与 /browser',
         capsuleShowPort: '胶囊显示端口',
         capsuleShowPortHint: '文案里带「· 端口号」',
         panelAutoOpenOnLaunch: '启动后自动展开画面',
         panelAutoOpenOnLaunchHint: '仅对触发启动的那个会话生效',
-        panelLayout: '布局',
-        panelLayoutHint: 'focus 为现在实现的焦点 + 胶片条；另外两个尚未实现',
         panelTileSplit: '焦点区高度占比',
         panelTileSplitHint: '0.15–0.85，拖分隔条会写回这里',
         panelSkillHeight: '技能区高度',
         panelSkillHeightHint: '40–360 像素，拖胶片条和技能区之间的分隔条会写回这里',
         panelFollowFrontTab: '焦点跟随最顶层标签',
         panelFollowFrontTabHint: '关掉时焦点只由你在画面里点选决定',
+        userDataDir: '用户数据目录',
+        userDataDirHint: '留空用这个工作区自己的目录。填了就用这份已经登录过的目录',
+        debugPort: '调试端口',
+        debugPortHint: '0 表示自动分配。填了就连接这个端口；上面已经有窗口就直接用，不另开',
         streamFocusFps: '焦点帧率',
         streamFocusFpsHint: '0.5–10 fps',
         streamFocusMaxWidth: '焦点最大宽度',
@@ -2882,23 +2871,20 @@ window.__ModuleLoader__.load({
         streamThumbMaxWidthHint: '像素',
         streamThumbQuality: '缩略图质量',
         streamThumbQualityHint: '1–100',
-        chromePath: 'chrome.exe 路径',
-        chromePathHint: '留空自动探测；需重启（下次启动实例时生效）',
         chromeCrossOrigin: '跨域',
         chromeCrossOriginHint: '加 --disable-web-security 等参数；切换会重启实例并关掉已打开标签',
         startupUrl: '默认起始页',
-        startupUrlHint: '没有可恢复的标签时开这个网址；留空则开 about:blank',
-        instanceRestoreTabsOnReopen: '再次启动时恢复标签',        instanceRestoreTabsOnReopenHint: '关窗本身不会自动重开，只影响你下次点「启动」',
+        startupUrlHint: '没有可恢复的标签、也没有下面这项时才用它；留空则开 about:blank',
+        instanceRestoreTabsOnReopen: '再次启动时恢复标签',
+        instanceRestoreTabsOnReopenHint: '有记住的标签就只打开那些，不再加空白页。一个都没有时才开 about:blank',
         instanceOnDshExit: 'DSH 退出时',
-        instanceOnDshExitHint: 'keep = 浏览器继续活着；close = 跟着关掉',
-        toolsWriteRequireApproval: '写操作需要授权',
-        toolsWriteRequireApprovalHint: '防误点：首次写操作前要你点一次「允许模型操作」',
-        toolsWriteAuthorized: '已授权写操作',
-        toolsWriteAuthorizedHint: '点过「允许模型操作」之后为开；关掉即收回',
-        toolsExposeEvaluate: '暴露 evaluate 工具',
-        toolsExposeEvaluateHint: '任意 JS，破坏面最大；默认不注册',
+        instanceOnDshExitHint: 'keep = 本插件启动的浏览器继续活着；close = 退出 DSH 时关掉它。接到已有调试窗口时不会关',
         saving: '保存中…',
         failed: '保存失败',
+        save: '保存',
+        discard: '放弃修改',
+        unsaved: '未保存',
+        invalid: '有一项填得不对，改完才能保存。',
         ready: '已生效',
         unavailable: '设置服务不可用',
         readonly: '只读（页面非回环访问）',
@@ -2909,27 +2895,28 @@ window.__ModuleLoader__.load({
       en: {
         title: 'Workspace browser',
         subtitle: 'dsh-helper-plugin-workspace-browser',
-        intro: 'A real Chrome with a debugging port for this workspace. Changes apply immediately; items marked “restart” take effect the next time the instance starts.',
+        intro: 'A real Chrome with a debugging port for this workspace. Save to apply changes; items marked “restart” take effect the next time the instance starts.',
         groupCapsule: 'Capsule',
         groupPanel: 'View',
         groupStream: 'Framerate and quality',
-        groupChrome: 'Chrome',
+        groupBrowser: 'Browser',
         groupInstance: 'Instance',
-        groupTools: 'Model tools',
         capsuleEnabled: 'Show the capsule',
         capsuleEnabledHint: 'The entry button on the input row; the header button and /browser still work when off',
         capsuleShowPort: 'Show the port',
         capsuleShowPortHint: 'Appends “· port” to the label',
         panelAutoOpenOnLaunch: 'Open the view after launch',
         panelAutoOpenOnLaunchHint: 'Only the session that triggered the launch',
-        panelLayout: 'Layout',
-        panelLayoutHint: 'focus is implemented (hero + filmstrip); the others are not yet',
         panelTileSplit: 'Hero height ratio',
         panelTileSplitHint: '0.15–0.85; dragging the splitter writes back here',
         panelSkillHeight: 'Skill area height',
         panelSkillHeightHint: '40–360 px; dragging the splitter under the filmstrip writes back here',
         panelFollowFrontTab: 'Follow the frontmost tab',
         panelFollowFrontTabHint: 'When off, the hero follows only your clicks',
+        userDataDir: 'User data directory',
+        userDataDirHint: 'Empty uses this workspace’s own profile. Set it to a directory that is already signed in',
+        debugPort: 'Debug port',
+        debugPortHint: '0 assigns a port at launch. A number connects to that port and reuses a window already listening there',
         streamFocusFps: 'Hero framerate',
         streamFocusFpsHint: '0.5–10 fps',
         streamFocusMaxWidth: 'Hero max width',
@@ -2942,24 +2929,20 @@ window.__ModuleLoader__.load({
         streamThumbMaxWidthHint: 'Pixels',
         streamThumbQuality: 'Thumbnail quality',
         streamThumbQualityHint: '1–100',
-        chromePath: 'chrome.exe path',
-        chromePathHint: 'Empty probes automatically; needs a restart',
         chromeCrossOrigin: 'Cross-origin',
         chromeCrossOriginHint: 'Adds --disable-web-security; toggling restarts the instance and closes open tabs',
         startupUrl: 'Start page',
-        startupUrlHint: 'Opened when there is nothing to restore; empty means about:blank',
+        startupUrlHint: 'Used only when there is nothing to restore; empty means about:blank',
         instanceRestoreTabsOnReopen: 'Restore tabs on next start',
-        instanceRestoreTabsOnReopenHint: 'Closing the window never reopens it; this only affects your next Start',
+        instanceRestoreTabsOnReopenHint: 'Remembered tabs open alone, with no extra blank page. about:blank is used only when there are none',
         instanceOnDshExit: 'When DSH exits',
-        instanceOnDshExitHint: 'keep = leave the browser running; close = shut it down',
-        toolsWriteRequireApproval: 'Writes need approval',
-        toolsWriteRequireApprovalHint: 'Guards against mis-clicks: you approve once with “Allow model actions”',
-        toolsWriteAuthorized: 'Writes allowed',
-        toolsWriteAuthorizedHint: 'On after you approve once; turning it off revokes it',
-        toolsExposeEvaluate: 'Expose the evaluate tool',
-        toolsExposeEvaluateHint: 'Arbitrary JS, the largest blast radius; not registered by default',
+        instanceOnDshExitHint: 'keep = leave the browser this plugin started; close = shut it down on exit. An already-open debug window is left alone',
         saving: 'Saving…',
         failed: 'Save failed',
+        save: 'Save',
+        discard: 'Discard',
+        unsaved: 'Unsaved',
+        invalid: 'Fix the invalid value before saving.',
         ready: 'Applied',
         unavailable: 'Settings service unavailable',
         readonly: 'Read-only (non-loopback page)',
@@ -3049,16 +3032,30 @@ window.__ModuleLoader__.load({
             listeners.delete(listener);
           };
         },
-        async setField(key, raw) {
-          const field = SETTINGS_FIELDS.find((entry) => entry.key === key) ?? { key, kind: 'string' };
+        /**
+         * 一次写入多份已经校验过的值。失败时保留草稿，让用户改完再存。
+         *
+         * @param {Record<string, unknown>} patch - 要写入的键。
+         * @returns {Promise<boolean>} 全部写入成功为 true。
+         */
+        async saveFields(patch) {
+          const entries = Object.entries(patch);
+          if (entries.length === 0 || saving) return false;
           saving = true;
           failed = false;
           publish();
           try {
-            if (typeof scope.set === 'function') await scope.set(key, coerceSetting(field, raw));
-            else if (typeof scope.mutate === 'function') await scope.mutate([{ op: 'set', path: [key], value: coerceSetting(field, raw) }]);
+            if (typeof scope.mutate === 'function') {
+              await scope.mutate(entries.map(([key, item]) => ({ op: 'set', path: [key], value: item })));
+            } else if (typeof scope.set === 'function') {
+              for (const [key, item] of entries) await scope.set(key, item);
+            } else {
+              throw new Error('settings scope has no writer');
+            }
+            return true;
           } catch {
             failed = true;
+            return false;
           } finally {
             saving = false;
             publish();
@@ -3077,8 +3074,51 @@ window.__ModuleLoader__.load({
       React.useEffect(() => store.subscribe(() => setFallback(store.getSnapshot())), [store]);
       const state = typeof useStore === 'function' ? useStore((snapshot) => snapshot) : fallback;
       const [open, setOpen] = React.useState(false);
+      const [draft, setDraft] = React.useState({});
       const value = state.value;
       const disabled = !state.writable || state.saving;
+
+      const blankNumber = (raw) => typeof raw === 'string' && raw.trim() === '';
+      const sameSetting = (field, raw, saved) => {
+        if (field.kind === 'bool') return Boolean(raw) === Boolean(saved);
+        if (field.kind === 'int' || field.kind === 'number') {
+          if (blankNumber(raw)) return false;
+          const next = Number(raw);
+          return Number.isFinite(next) && next === Number(saved);
+        }
+        return String(raw ?? '') === String(saved ?? '');
+      };
+      const validSetting = (field, raw) => {
+        if (field.kind === 'bool') return true;
+        if (field.kind === 'enum') return (field.options ?? []).includes(String(raw));
+        if (field.kind === 'int' || field.kind === 'number') {
+          if (blankNumber(raw)) return false;
+          const next = Number(raw);
+          if (!Number.isFinite(next)) return false;
+          if (field.kind === 'int' && !Number.isInteger(next)) return false;
+          if (field.min !== undefined && next < field.min) return false;
+          if (field.max !== undefined && next > field.max) return false;
+          return true;
+        }
+        return true;
+      };
+      const editField = (field, raw) => {
+        setDraft((previous) => {
+          const next = { ...previous };
+          if (sameSetting(field, raw, value[field.key])) delete next[field.key];
+          else next[field.key] = raw;
+          return next;
+        });
+      };
+      const shown = { ...value };
+      const dirtyFields = [];
+      for (const field of SETTINGS_FIELDS) {
+        if (!Object.hasOwn(draft, field.key)) continue;
+        shown[field.key] = draft[field.key];
+        if (!sameSetting(field, draft[field.key], value[field.key])) dirtyFields.push(field);
+      }
+      const invalid = dirtyFields.some((field) => !validSetting(field, draft[field.key]));
+      const dirty = dirtyFields.length > 0;
 
       const control = (field) => {
         const common = {
@@ -3091,21 +3131,23 @@ window.__ModuleLoader__.load({
             border: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.4))',
             background: 'var(--dsw-alias-bg-layer-3, transparent)',
             color: 'inherit',
-            minWidth: 120,
+            boxSizing: 'border-box',
+            width: field.kind === 'string' ? 'min(100%, 280px)' : 140,
+            maxWidth: '100%',
           },
         };
         if (field.kind === 'bool') {
           return el('input', {
             type: 'checkbox',
-            checked: Boolean(value[field.key]),
+            checked: Boolean(shown[field.key]),
             disabled,
-            onChange: (event) => void store.setField(field.key, event.target.checked),
+            onChange: (event) => editField(field, event.target.checked),
           });
         }
         if (field.kind === 'enum') {
           return el(
             'select',
-            { ...common, value: String(value[field.key]), onChange: (event) => void store.setField(field.key, event.target.value) },
+            { ...common, value: String(shown[field.key] ?? ''), onChange: (event) => editField(field, event.target.value) },
             ...(field.options ?? []).map((option) => el('option', { key: option, value: option }, option)),
           );
         }
@@ -3115,8 +3157,8 @@ window.__ModuleLoader__.load({
           step: field.kind === 'int' ? 1 : 'any',
           min: field.min,
           max: field.max,
-          value: field.kind === 'string' ? String(value[field.key] ?? '') : String(value[field.key] ?? ''),
-          onChange: (event) => void store.setField(field.key, event.target.value),
+          value: String(shown[field.key] ?? ''),
+          onChange: (event) => editField(field, event.target.value),
         });
       };
 
@@ -3135,28 +3177,46 @@ window.__ModuleLoader__.load({
           ...group.fields.map((field) =>
             el(
               'div',
-              { key: field.key, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '3px 0' } },
+              {
+                key: field.key,
+                style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0' },
+              },
               el(
                 'label',
-                { style: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 1.5 } },
+                { style: { flex: '1 1 12em', minWidth: 0, fontSize: 12, lineHeight: 1.5 } },
                 t(field.key),
-                el('span', { style: { opacity: 0.65 } }, ` — ${t(`${field.key}Hint`)}`),
+                el('span', { style: { display: 'block', opacity: 0.65 } }, t(`${field.key}Hint`)),
               ),
-              control(field),
+              el('span', { style: { flex: '0 0 auto', maxWidth: '100%' } }, control(field)),
             ),
           ),
         ),
       );
 
-      const status = state.saving
-        ? t('saving')
-        : state.failed
-          ? t('failed')
-          : !state.available
-            ? t('unavailable')
-            : state.writable
-              ? t('ready')
-              : t('readonly');
+      const buttonStyle = (primary, blocked) => ({
+        font: 'inherit',
+        cursor: blocked ? 'default' : 'pointer',
+        opacity: blocked ? 0.4 : 1,
+        border: primary ? '1px solid transparent' : '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.4))',
+        borderRadius: 8,
+        padding: '5px 14px',
+        fontSize: 13,
+        lineHeight: 1.5,
+        background: primary ? 'var(--dsw-alias-label-primary, #1f2328)' : 'transparent',
+        color: primary ? 'var(--dsw-alias-bg-layer-3, #fff)' : 'var(--dsw-alias-label-secondary, inherit)',
+      });
+      const save = () => {
+        if (!dirty || invalid || state.saving || !state.writable) return;
+        const patch = {};
+        for (const field of dirtyFields) patch[field.key] = coerceSetting(field, draft[field.key]);
+        void store.saveFields(patch).then((ok) => {
+          if (ok) setDraft({});
+        });
+      };
+      const discard = () => {
+        if (state.saving) return;
+        setDraft({});
+      };
 
       return el(
         'li',
@@ -3168,6 +3228,9 @@ window.__ModuleLoader__.load({
             borderRadius: 12,
             background: 'var(--dsw-alias-bg-layer-3, transparent)',
             overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            maxHeight: open ? 'min(72vh, 720px)' : undefined,
           },
         },
         el(
@@ -3177,6 +3240,7 @@ window.__ModuleLoader__.load({
             onClick: () => setOpen((previous) => !previous),
             style: {
               width: '100%',
+              flex: '0 0 auto',
               display: 'flex',
               alignItems: 'flex-start',
               gap: 10,
@@ -3196,14 +3260,62 @@ window.__ModuleLoader__.load({
             el('span', { style: { fontSize: 12, opacity: 0.65 } }, t('subtitle')),
             el('span', { style: { fontSize: 12, lineHeight: 1.5, opacity: 0.8 } }, t('intro')),
           ),
-          el('span', { style: { fontSize: 11, opacity: 0.65, whiteSpace: 'nowrap' } }, open ? t('collapse') : t('expand')),
+          dirty
+            ? el(
+              'span',
+              {
+                style: {
+                  flex: '0 0 auto',
+                  fontSize: 11,
+                  lineHeight: 1.4,
+                  padding: '1px 6px',
+                  borderRadius: 999,
+                  background: 'var(--dsw-alias-bg-layer-2, rgba(128,128,128,.16))',
+                  whiteSpace: 'nowrap',
+                },
+              },
+              t('unsaved'),
+            )
+            : null,
+          el('span', { style: { flex: '0 0 auto', fontSize: 11, opacity: 0.65, whiteSpace: 'nowrap' } }, open ? t('collapse') : t('expand')),
         ),
         open
           ? el(
             'div',
-            { style: { padding: '0 16px 16px' } },
+            { style: { padding: '0 16px 16px', overflowY: 'auto', overflowX: 'hidden', minHeight: 0, flex: '1 1 auto' } },
             ...body,
-            el('div', { style: { marginTop: 12, fontSize: 11, opacity: 0.7 } }, status),
+            !state.available || !state.writable
+              ? el('div', { style: { marginTop: 12, fontSize: 12, opacity: 0.7 } }, state.available ? t('readonly') : t('unavailable'))
+              : null,
+            el(
+              'div',
+              {
+                style: {
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTop: '0.5px solid var(--dsw-alias-border-l2, rgba(128,128,128,.35))',
+                },
+              },
+              state.failed
+                ? el('span', { style: { flex: 1, minWidth: 0, fontSize: 12, color: 'var(--dsw-alias-label-error, #c0392b)' } }, t('failed'))
+                : invalid
+                  ? el('span', { style: { flex: 1, minWidth: 0, fontSize: 12, opacity: 0.7 } }, t('invalid'))
+                  : el('span', { style: { flex: 1 } }),
+              el(
+                'button',
+                { type: 'button', disabled: !dirty || state.saving, onClick: discard, style: buttonStyle(false, !dirty || state.saving) },
+                t('discard'),
+              ),
+              el(
+                'button',
+                { type: 'button', disabled: !dirty || invalid || state.saving || !state.writable, onClick: save, style: buttonStyle(true, !dirty || invalid || state.saving || !state.writable) },
+                t(state.saving ? 'saving' : 'save'),
+              ),
+            ),
           )
           : null,
       );

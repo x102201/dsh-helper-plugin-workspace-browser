@@ -176,10 +176,11 @@ test('设置：默认值齐备，非法值抛错，未知键被丢掉', () => {
   for (const key of Object.keys(FIELD_DEFAULTS)) {
     assert.deepEqual(defaults[key], FIELD_DEFAULTS[key], `${key} 的默认值应一致`);
   }
-  assert.equal(defaults.panelLayout, 'focus');
+  assert.equal(defaults.userDataDir, '');
+  assert.equal(defaults.debugPort, 0);
   assert.equal(defaults.streamFocusQuality, 70);
 
-  assert.throws(() => normalizeSettings({ panelLayout: 'mosaic' }), /panelLayout/u);
+  assert.throws(() => normalizeSettings({ debugPort: 70000 }), /debugPort/u);
   assert.throws(() => normalizeSettings({ streamFocusQuality: 101 }), /streamFocusQuality/u);
   assert.throws(() => normalizeSettings({ panelTileSplit: 0 }), /panelTileSplit/u);
   assert.throws(() => normalizeSettings({ instanceOnDshExit: 'maybe' }), /instanceOnDshExit/u);
@@ -233,6 +234,23 @@ test('页面过滤：排除 devtools、扩展页与浏览器内部 UI', () => {
     pages.map((page) => page.id),
     ['1', '5', '8'],
     'about:blank 与用户打开的 chrome:// 算页面；devtools/扩展/omnibox/内部 UI 不算',
+  );
+});
+
+test('启动网址：有标签不加空白页，没有标签才开 about:blank', async () => {
+  const { startupTargets } = await import('../lib/instance.js');
+  assert.deepEqual(
+    startupTargets({ tabs: ['https://example.com/a', 'about:blank'], restore: true }),
+    ['https://example.com/a'],
+  );
+  assert.deepEqual(startupTargets({ tabs: [], restore: true }), ['about:blank']);
+  assert.deepEqual(
+    startupTargets({ tabs: ['https://example.com/a'], restore: false, startupUrl: '' }),
+    ['about:blank'],
+  );
+  assert.deepEqual(
+    startupTargets({ tabs: [], restore: true, startupUrl: 'https://example.com/start' }),
+    ['https://example.com/start'],
   );
 });
 

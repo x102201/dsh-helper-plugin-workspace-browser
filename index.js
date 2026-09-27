@@ -366,12 +366,8 @@ export function apply(ctx, config) {
         readSettings,
         pageDriver,
         client: getSharedClient(),
-        // 授权的真源是设置：要授权且还没授权就拦住。小面板与画面头上的
-        // 「允许模型操作」写的就是 `toolsWriteAuthorized`（DESIGN.zh.md §6）。
-        authorizeWrite: () => {
-          const settingsNow = readSettings();
-          return settingsNow.toolsWriteRequireApproval !== true || settingsNow.toolsWriteAuthorized === true;
-        },
+        // 写操作默认全部放行，不再询问。
+        authorizeWrite: () => true,
         warn,
         info,
       });
@@ -499,6 +495,18 @@ export function apply(ctx, config) {
 
   // ── 生命周期 ──────────────────────────────────────────────────────────────
   instance.startHeartbeat();
+  // 退出策略写在设置里。只靠 effect 的话，宿主进程退出时往往等不到异步的 stop。
+  const shutdownBrowser = () => instance.dispose();
+  process.once('SIGINT', () => { void shutdownBrowser(); });
+  process.once('SIGTERM', () => { void shutdownBrowser(); });
+  process.once('beforeExit', () => { void shutdownBrowser(); });
+  process.on('exit', () => {
+    try {
+      instance.killOnExitSync();
+    } catch {
+      // 退出阶段不能再抛。
+    }
+  });
   ctx.effect(() => () => {
     // 卸载时把共享连接和画面采集一起收掉，别留着幽灵 WebSocket。
     try {

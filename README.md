@@ -126,7 +126,7 @@ dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-
 | 读 | `snapshot`、`get_text`、`list_tabs`、`select_tab`、`screenshot` |
 | 写 | `click`、`type`、`press`、`scroll`、`navigate`、`open_tab`、`close_tab`、`back`、`forward`、`reload`、`wait` |
 | 保存技能 | `save_skill`（要你先在对话里确认） |
-| 默认没有 | `evaluate`。只有在配置里打开 `toolsExposeEvaluate` 才会出现 |
+| 默认没有 | `evaluate` |
 
 名字都带前缀 `workspace_browser_`。
 
@@ -136,7 +136,7 @@ dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-
 
 截图给人看，也给 `screenshot` 工具落盘。认按钮、读正文不走截图。
 
-写操作默认直接执行。若在配置里打开「写操作需先允许」，则要在小面板或画面头上点一次「允许模型操作」。这是防止误点，不是访问控制。
+写操作直接执行，不再询问。
 
 正文和点击使用 `playwright-core`，连到已经启动的那个 Chrome。第一次读写页面时，如果本机还没有这个库，会装到 `<DSH_HOME>/workspace-browser/vendor/`，版本钉在 `1.55.1`，不会再下载一份浏览器。装不上时读写工具返回 `playwright-missing`，胶囊和画面仍可用。进程、标签、画面和截图仍走 Chrome 调试协议。
 
@@ -164,22 +164,19 @@ dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-
 | `capsuleEnabled` | 开 | 输入框那一行的胶囊 |
 | `capsuleShowPort` | 开 | 胶囊文案里带端口 |
 | `panelAutoOpenOnLaunch` | 开 | 启动成功后展开画面 |
-| `panelLayout` | `focus` | 目前可用的是焦点加胶片条。`grid`、`single` 尚未做 |
 | `panelTileSplit` | `0.55` | 焦点区高度占比，拖分隔条会写回 |
 | `panelSkillHeight` | `72` | 技能区高度（像素，40–360），拖胶片条下方的分隔条会写回 |
 | `panelFollowFrontTab` | 关 | 焦点是否跟随窗口里最顶层的标签 |
 | `streamFocusFps` / `streamFocusMaxWidth` / `streamFocusQuality` | `2` / `960` / `70` | 主画面。质量是 1–100 的整数 |
 | `streamThumbFps` / `streamThumbMaxWidth` / `streamThumbQuality` | `0.25` / `160` / `50` | 缩略图。帧率 0 表示不要缩略图 |
-| `chromePath` | 空 | 手动指定 `chrome.exe` |
+| `userDataDir` | 空 | 留空用工作区自己的目录。填了就用这份已经登录过的用户数据目录 |
+| `debugPort` | `0` | 0 为自动分配。填了就连接这个端口；端口上已有窗口就直接用 |
 | `chromeCrossOrigin` | 关 | 打开后加上关闭站点隔离的启动参数，并重启实例 |
 | `startupUrl` | 空 | 没有可恢复标签时打开的网址。空则是空白页 |
-| `instanceRestoreTabsOnReopen` | 开 | 再次启动时恢复上次的标签 |
-| `instanceOnDshExit` | `keep` | `keep` 留下浏览器，`close` 随 DSH 退出关掉 |
-| `toolsWriteRequireApproval` | 关 | 打开后，写操作要先点「允许模型操作」 |
-| `toolsWriteAuthorized` | 关 | 点过允许之后为开 |
-| `toolsExposeEvaluate` | 关 | 为开才注册 `evaluate` |
+| `instanceRestoreTabsOnReopen` | 开 | 有记住的标签就只打开那些，不再加空白页。没有时才开 about:blank |
+| `instanceOnDshExit` | `keep` | `keep` 留下本插件启动的浏览器，`close` 随 DSH 退出关掉。接到已有调试窗口时不关 |
 
-画面、胶囊相关的项马上生效。Chrome 路径、跨域、退出行为要重启这个工作区的浏览器，改的时候会提示。
+画面、胶囊相关的项在点保存后马上生效。用户数据目录、调试端口、跨域和退出行为在下次启动这个浏览器时生效。
 
 设置页里如果看不到本插件，宿主和浏览器两边都要注册同一个 namespace。少一边，那一栏是空的。注册成功时浏览器控制台有一行 `注册插件配置卡片`。
 
