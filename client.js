@@ -55,6 +55,7 @@ window.__ModuleLoader__.load({
     const POLL_MS = 2000;
     /** 输入框引用芯片的 source 名（须与 inputTriggers 注册名一致，发送时靠它找 codec）。 */
     const TAB_REF_SOURCE = 'workspace-browser';
+    const SKILL_REF_SOURCE = 'workspace-browser-skill';
 
     const COPY = {
       zh: {
@@ -117,6 +118,12 @@ window.__ModuleLoader__.load({
         mirrorAssignDone: '已加入对话',
         mirrorAssignNoInput: '当前会话没有输入框',
         atSectionTabs: '浏览器标签',
+        atSectionSkills: '技能',
+        skillUsage: '在输入框里管理技能：/browser 新增技能、/browser 新增skill、/browser 保存skill、/browser 修改skill。模型会先确认你的意图，你同意之后才会写入下面的名单。点名字只查看。@ 或「加入对话」只放入技能名，发出去之后模型才看到全文。',
+        skillUsageLabel: 'Skill',
+        skillMenuOpen: '查看',
+        skillMenuReveal: '在文件资源管理器中显示',
+        skillEmpty: '还没有技能。',
         mirrorCloseTab: '关闭标签',
         mirrorCopyUrl: '复制 URL',
         mirrorOpenTab: '在新标签打开',
@@ -131,6 +138,7 @@ window.__ModuleLoader__.load({
         mirrorTileAttached: 'CDP 已接管（工具或画面正在用它）',
         mirrorTileDetached: '未接管（调试通道未连上，或还没采到画面）',
         mirrorSplitHint: '拖动调整焦点区与胶片条的高度（会记住）',
+        mirrorSkillSplitHint: '拖动调整胶片条与技能区的高度（会记住）',
         mirrorActionFailed: '操作失败',
       },
       en: {
@@ -155,6 +163,12 @@ window.__ModuleLoader__.load({
         openPanel: 'Open the browser view',
         allowWrite: 'Allow model actions',
         atSectionTabs: 'Browser tabs',
+        atSectionSkills: 'Skills',
+        skillUsage: 'Manage skills from the composer: /browser 新增技能, /browser 新增skill, /browser 保存skill, /browser 修改skill. The model confirms your intent first, and writes the list only after you agree. Click a name only to read it. @ or Add to chat inserts the name; the model sees the full steps after you send.',
+        skillUsageLabel: 'Skill',
+        skillMenuOpen: 'Open',
+        skillMenuReveal: 'Show in File Explorer',
+        skillEmpty: 'No skills yet.',
         allowed: 'Allowed',
         chromeMissingTitle: 'Chrome not found',
         chromeMissingBody: 'Install Chrome on this machine, or point to chrome.exe.',
@@ -207,6 +221,7 @@ window.__ModuleLoader__.load({
         mirrorTileAttached: 'CDP attached (a tool or the mirror is using it)',
         mirrorTileDetached: 'Not attached (debug channel down, or no frame yet)',
         mirrorSplitHint: 'Drag to resize the hero and the filmstrip (remembered)',
+        mirrorSkillSplitHint: 'Drag to resize the filmstrip and the skill area (remembered)',
         mirrorActionFailed: 'Action failed',
       },
     };
@@ -364,6 +379,158 @@ window.__ModuleLoader__.load({
         return ok ? { ok: true } : { ok: false, error: 'insert-rejected' };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+
+    /**
+     * 把技能插成输入框芯片。脸上只有名字，步骤在发送时由 codec 展开。
+     *
+     * @param {object} ctx - 客户端根上下文。
+     * @param {string} sessionId - 当前会话。
+     * @param {object} skill - `{ name }`。
+     * @returns {{ ok: boolean, error?: string }} 是否插入成功。
+     */
+    function insertSkillReferenceChip(ctx, sessionId, skill) {
+      if (typeof sessionId !== 'string' || sessionId === '') return { ok: false, error: 'no-session' };
+      const name = typeof skill?.name === 'string' ? skill.name.trim() : '';
+      if (name === '') return { ok: false, error: 'no-name' };
+      const conversation = typeof ctx.get === 'function' ? ctx.get('conversation') : undefined;
+      const input = conversation?.input;
+      if (!input || typeof input.shell !== 'function') return { ok: false, error: 'no-input' };
+      let shell;
+      try {
+        shell = input.shell(sessionId);
+      } catch {
+        return { ok: false, error: 'no-shell' };
+      }
+      if (!shell || typeof shell.insertReference !== 'function') return { ok: false, error: 'no-insert' };
+      const reference = {
+        source: SKILL_REF_SOURCE,
+        ref: JSON.stringify({ name }),
+        label: name,
+        appearance: 'file',
+        clipboardText: name,
+      };
+      const snap = shell.snapshot;
+      const draftRev = typeof snap?.draftRev === 'number' ? snap.draftRev : 0;
+      let start = 0;
+      let end = 0;
+      if (typeof shell.caretSpan === 'function') {
+        const caret = shell.caretSpan();
+        start = typeof caret?.start === 'number' ? caret.start : 0;
+        end = typeof caret?.end === 'number' ? caret.end : start;
+      } else if (typeof snap?.draft === 'string') {
+        start = end = snap.draft.length;
+      }
+      try {
+        const ok = shell.insertReference(reference, { start, end, draftRev });
+        return ok ? { ok: true } : { ok: false, error: 'insert-rejected' };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+
+    /**
+     * 注册「技能」引用源。选中后插入不展开的芯片，发送时再向 `/skills` 取全文。
+     *
+     * @param {object} ctx - 客户端上下文。
+     * @returns {() => void} 注销。
+     */
+    function attachSkillReferenceSource(ctx) {
+      const inputTriggers = typeof ctx.get === 'function' ? ctx.get('inputTriggers') : undefined;
+      if (!inputTriggers || typeof inputTriggers.registerSource !== 'function') return () => {};
+      try {
+        return inputTriggers.registerSource({
+          trigger: '@',
+          name: SKILL_REF_SOURCE,
+          order: 46,
+          showGroupTitle: false,
+          candidates: async (_session, req) => {
+            if (req?.signal?.aborted) return [];
+            let payload;
+            try {
+              payload = await callControl('/skills', { signal: req?.signal });
+            } catch {
+              return [];
+            }
+            if (req?.signal?.aborted) return [];
+            const needle = typeof req?.query === 'string' ? req.query.trim().toLocaleLowerCase() : '';
+            const section = (() => {
+              const locale = typeof ctx.get === 'function' ? ctx.get('locale') : undefined;
+              if (locale && typeof locale.bind === 'function') {
+                try {
+                  const label = locale.bind(LOCALE_NS)('atSectionSkills');
+                  if (typeof label === 'string' && label !== '' && label !== 'atSectionSkills') return label;
+                } catch {
+                  /* 词典未注册 */
+                }
+              }
+              return COPY.zh.atSectionSkills;
+            })();
+            const rows = [];
+            for (const skill of Array.isArray(payload?.skills) ? payload.skills : []) {
+              const name = typeof skill?.name === 'string' ? skill.name : '';
+              if (name === '') continue;
+              const description = typeof skill?.description === 'string' ? skill.description : '';
+              if (needle !== '' && !`${name}\n${description}`.toLocaleLowerCase().includes(needle)) continue;
+              rows.push({
+                name,
+                ...(description === '' ? {} : { description }),
+                icon: 'file',
+                section,
+                value: JSON.stringify({ name }),
+              });
+            }
+            return rows;
+          },
+          onPick: ({ candidate }) => {
+            if (typeof candidate?.value !== 'string' || candidate.value === '') return undefined;
+            let skill;
+            try {
+              skill = JSON.parse(candidate.value);
+            } catch {
+              return undefined;
+            }
+            const name = typeof skill?.name === 'string' ? skill.name : '';
+            if (name === '') return undefined;
+            return {
+              insert: {
+                source: SKILL_REF_SOURCE,
+                ref: JSON.stringify({ name }),
+                label: name,
+                appearance: 'file',
+                clipboardText: name,
+              },
+            };
+          },
+          codec: {
+            clipboardText: (ref) => {
+              try {
+                return JSON.parse(ref).name ?? ref;
+              } catch {
+                return ref;
+              }
+            },
+            serialize: async (ref) => {
+              let name = '';
+              try {
+                name = JSON.parse(ref).name ?? '';
+              } catch {
+                return ref;
+              }
+              try {
+                const payload = await callControl(`/skills?name=${encodeURIComponent(name)}`);
+                if (typeof payload?.skill?.mention === 'string' && payload.skill.mention !== '') return payload.skill.mention;
+              } catch {
+                /* 展开失败时至少把名字交给模型 */
+              }
+              return `@"技能｜请先 workspace_browser_snapshot，再按名为「${name}」的技能操作/${name}"`;
+            },
+          },
+        });
+      } catch (error) {
+        console.error('[workspace-browser] 技能引用源注册失败', error);
+        return () => {};
       }
     }
 
@@ -1834,7 +2001,7 @@ window.__ModuleLoader__.load({
      * @returns {object} React 元素。
      */
     function MirrorBody(props) {
-      const { store, t, insertTabChip } = props;
+      const { store, t, insertTabChip, insertSkillChip } = props;
       const sessionId = typeof props.sessionId === 'string' ? props.sessionId : '';
       const snapshot = useStatus(store);
       const value = snapshot.value;
@@ -1844,11 +2011,52 @@ window.__ModuleLoader__.load({
       const hub = mirrorHubFor(store);
       const [mirror, setMirror] = React.useState(hub.getSnapshot());
       React.useEffect(() => hub.subscribe(() => setMirror(hub.getSnapshot())), [hub]);
+      const [skills, setSkills] = React.useState([]);
+      const [skillUsage, setSkillUsage] = React.useState('');
+      const [usageOpen, setUsageOpen] = React.useState(false);
+      const [hoverSkill, setHoverSkill] = React.useState('');
+      const [skillMenu, setSkillMenu] = React.useState(null);
+      const skillsKeyRef = React.useRef('');
+      function reloadSkills() {
+        return callControl('/skills')
+          .then((payload) => {
+            const next = Array.isArray(payload?.skills) ? payload.skills : [];
+            const key = next.map((skill) => `${skill?.name ?? ''}\t${skill?.description ?? ''}`).join('\n');
+            if (key !== skillsKeyRef.current) {
+              skillsKeyRef.current = key;
+              setSkills(next);
+            }
+            if (typeof payload?.usage === 'string') setSkillUsage(payload.usage);
+          })
+          .catch(() => {});
+      }
+      function locateSkill(name, action) {
+        setSkillMenu(null);
+        void callControl('/skills/locate', { method: 'POST', body: { name, action } })
+          .then((payload) => {
+            if (payload?.ok !== true) setNote(payload?.error || t('mirrorActionFailed'));
+          })
+          .catch((error) => setNote(error instanceof Error ? error.message : String(error)));
+      }
 
       // 「只有可见时才连接」：`tab.visible` 由框架给，含浮出的面板（§5／§7）。
       // 拿不到 useTabInfo（老宿主、测试）时按可见处理 —— 功能不因此消失。
       const tabInfo = typeof props.useTabInfo === 'function' ? props.useTabInfo() : null;
       const visible = tabInfo === null || tabInfo === undefined ? true : tabInfo?.tab?.visible !== false;
+
+      React.useEffect(() => {
+        if (!visible) return undefined;
+        let stopped = false;
+        const load = () => {
+          if (!stopped) void reloadSkills();
+        };
+        load();
+        const timer = setInterval(load, POLL_MS);
+        return () => {
+          stopped = true;
+          clearInterval(timer);
+        };
+      }, [visible]);
 
       React.useEffect(() => {
         if (!visible) return undefined;
@@ -1866,6 +2074,7 @@ window.__ModuleLoader__.load({
       const [legend, setLegend] = React.useState(false);
       const [note, setNote] = React.useState('');
       const [dragSplit, setDragSplit] = React.useState(null);
+      const [dragSkillHeight, setDragSkillHeight] = React.useState(null);
       const bodyRef = React.useRef(null);
       // 切胶片条时：没有焦点档新帧前先留着上一张主画面，避免缩略图拉满先糊一下。
       const heroHoldRef = React.useRef(null);
@@ -1898,11 +2107,18 @@ window.__ModuleLoader__.load({
 
       const serverSplit = numberOr(value?.settings?.panelTileSplit, 0.55);
       const split = dragSplit === null ? Math.min(0.85, Math.max(0.15, serverSplit)) : dragSplit;
+      const serverSkillHeight = integerOr(value?.settings?.panelSkillHeight, 72);
+      const skillHeight = dragSkillHeight === null
+        ? Math.min(360, Math.max(40, serverSkillHeight))
+        : dragSkillHeight;
 
       React.useEffect(() => {
         // 设置已经写回来了（或者本来就是这个值）：交回给服务端那份。
         if (dragSplit !== null && Math.abs(serverSplit - dragSplit) < 0.001) setDragSplit(null);
       }, [serverSplit, dragSplit]);
+      React.useEffect(() => {
+        if (dragSkillHeight !== null && serverSkillHeight === dragSkillHeight) setDragSkillHeight(null);
+      }, [serverSkillHeight, dragSkillHeight]);
 
       /**
        * 右键菜单 / 主画面按钮的动作。
@@ -1980,6 +2196,32 @@ window.__ModuleLoader__.load({
           const ratio = ratioOf(upEvent.clientY);
           setDragSplit(ratio);
           void callControl('/prefs', { method: 'POST', body: { panelTileSplit: ratio } })
+            .then(() => store.refresh())
+            .catch(() => {});
+        };
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+      };
+
+      /**
+       * 拖胶片条和技能区之间的分隔条。高度从画面底边量起，松手写入 `panelSkillHeight`。
+       *
+       * @param {object} event - pointerdown 事件。
+       * @returns {void}
+       */
+      const startSkillDrag = (event) => {
+        const element = bodyRef.current;
+        if (element === null || element === undefined) return;
+        event.preventDefault();
+        const rect = element.getBoundingClientRect();
+        const heightOf = (clientY) => Math.min(360, Math.max(40, Math.round(rect.bottom - clientY)));
+        const move = (moveEvent) => setDragSkillHeight(heightOf(moveEvent.clientY));
+        const up = (upEvent) => {
+          document.removeEventListener('pointermove', move);
+          document.removeEventListener('pointerup', up);
+          const height = heightOf(upEvent.clientY);
+          setDragSkillHeight(height);
+          void callControl('/prefs', { method: 'POST', body: { panelSkillHeight: height } })
             .then(() => store.refresh())
             .catch(() => {});
         };
@@ -2357,8 +2599,121 @@ window.__ModuleLoader__.load({
           hero,
           splitter,
           filmstrip,
-        ),
-        note !== ''
+          React.createElement(
+            'div',
+            {
+              role: 'separator',
+              'aria-orientation': 'horizontal',
+              title: t('mirrorSkillSplitHint'),
+              onPointerDown: startSkillDrag,
+              style: {
+                flex: '0 0 8px',
+                cursor: 'row-resize',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderTop: `1px solid ${MIRROR_BORDER}`,
+                background: 'transparent',
+              },
+            },
+            React.createElement('span', { style: { width: 28, height: 2, borderRadius: 1, background: MIRROR_BORDER } }),
+          ),
+          React.createElement(
+            'div',
+            {
+              style: {
+                flex: `0 0 ${skillHeight}px`,
+                height: skillHeight,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              },
+            },
+            React.createElement(
+              'div',
+              { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px' } },
+              React.createElement(
+                'div',
+                {
+                  style: { position: 'relative', display: 'inline-flex' },
+                  onMouseEnter: () => setUsageOpen(true),
+                  onMouseLeave: () => setUsageOpen(false),
+                },
+                React.createElement(
+                  'button',
+                  { type: 'button', style: { ...MIRROR_BUTTON, color: MIRROR_DIM, padding: '2px 8px' } },
+                  t('skillUsageLabel'),
+                ),
+                usageOpen
+                  ? React.createElement(
+                    'div',
+                    {
+                      style: {
+                        position: 'absolute',
+                        left: 0,
+                        bottom: 'calc(100% + 6px)',
+                        width: 280,
+                        zIndex: 20,
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        background: MIRROR_SURFACE,
+                        border: `1px solid ${MIRROR_BORDER}`,
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                        color: 'var(--dsw-alias-label-primary, inherit)',
+                        fontSize: 11,
+                        lineHeight: 1.45,
+                        whiteSpace: 'normal',
+                      },
+                    },
+                    skillUsage || t('skillUsage'),
+                  )
+                  : null,
+              ),
+              skills.length === 0
+                ? React.createElement('span', { style: { fontSize: 12, color: MIRROR_DIM } }, t('skillEmpty'))
+                : null,
+            ),
+            skills.length === 0
+              ? null
+              : React.createElement(
+                'div',
+                {
+                  style: {
+                    flex: '1 1 auto',
+                    minHeight: 0,
+                    overflow: 'auto',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignContent: 'flex-start',
+                    gap: 4,
+                    padding: '0 10px 8px',
+                  },
+                },
+                skills.map((skill) => React.createElement(
+                  'div',
+                  {
+                    key: skill.name,
+                    onMouseEnter: () => setHoverSkill(skill.name),
+                    onMouseLeave: () => setHoverSkill((current) => (current === skill.name ? '' : current)),
+                    onContextMenu: (event) => {
+                      event.preventDefault();
+                      setSkillMenu({ name: skill.name, x: event.clientX, y: event.clientY });
+                    },
+                    style: {
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                      cursor: 'default',
+                      lineHeight: '20px',
+                      background: hoverSkill === skill.name || skillMenu?.name === skill.name ? MIRROR_HOVER : 'transparent',
+                    },
+                  },
+                  skill.name,
+                )),
+              ),
+            ),
+          ),
+          note !== ''
           ? React.createElement('div', {
             style: {
               flex: '0 0 auto',
@@ -2368,6 +2723,64 @@ window.__ModuleLoader__.load({
             },
           }, note)
           : null,
+        skillMenu === null
+          ? null
+          : React.createElement(
+            'div',
+            {
+              style: { position: 'fixed', inset: 0, zIndex: 40 },
+              onMouseDown: () => setSkillMenu(null),
+              onContextMenu: (event) => {
+                event.preventDefault();
+                setSkillMenu(null);
+              },
+            },
+            React.createElement(
+              'div',
+              {
+                style: {
+                  position: 'fixed',
+                  left: skillMenu.x,
+                  top: skillMenu.y,
+                  transform: 'translateY(calc(-100% - 4px))',
+                  zIndex: 41,
+                  minWidth: 220,
+                  padding: 4,
+                  borderRadius: 8,
+                  background: MIRROR_SURFACE,
+                  border: `1px solid ${MIRROR_BORDER}`,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                },
+                onMouseDown: (event) => event.stopPropagation(),
+              },
+              [
+                {
+                  key: 'add',
+                  label: t('mirrorAssignToModel'),
+                  onClick: () => {
+                    const name = skillMenu.name;
+                    setSkillMenu(null);
+                    const result = typeof insertSkillChip === 'function'
+                      ? insertSkillChip(sessionId, { name })
+                      : { ok: false, error: 'no-input' };
+                    setNote(result?.ok ? t('mirrorAssignDone') : t('mirrorAssignNoInput'));
+                  },
+                },
+                { key: 'open', label: t('skillMenuOpen'), title: '转到工作区文件夹并打开文件', onClick: () => locateSkill(skillMenu.name, 'open') },
+                { key: 'reveal', label: t('skillMenuReveal'), onClick: () => locateSkill(skillMenu.name, 'reveal') },
+              ].map((item) => React.createElement(
+                'button',
+                {
+                  key: item.key,
+                  type: 'button',
+                  title: item.title,
+                  style: { ...MIRROR_BUTTON, display: 'block', width: '100%', textAlign: 'left' },
+                  onClick: item.onClick,
+                },
+                item.label,
+              )),
+            ),
+          ),
       );
     }
 
@@ -2388,6 +2801,7 @@ window.__ModuleLoader__.load({
       panelAutoOpenOnLaunch: true,
       panelLayout: 'focus',
       panelTileSplit: 0.55,
+      panelSkillHeight: 72,
       panelFollowFrontTab: false,
       streamFocusFps: 2,
       streamFocusMaxWidth: 960,
@@ -2412,6 +2826,7 @@ window.__ModuleLoader__.load({
       { key: 'panelAutoOpenOnLaunch', kind: 'bool', group: 'panel' },
       { key: 'panelLayout', kind: 'enum', options: ['focus', 'grid', 'single'], group: 'panel' },
       { key: 'panelTileSplit', kind: 'number', min: 0.15, max: 0.85, group: 'panel' },
+      { key: 'panelSkillHeight', kind: 'int', min: 40, max: 360, group: 'panel' },
       { key: 'panelFollowFrontTab', kind: 'bool', group: 'panel' },
       { key: 'streamFocusFps', kind: 'number', min: 0.5, max: 10, group: 'stream' },
       { key: 'streamFocusMaxWidth', kind: 'int', min: 160, max: 3840, group: 'stream' },
@@ -2451,6 +2866,8 @@ window.__ModuleLoader__.load({
         panelLayoutHint: 'focus 为现在实现的焦点 + 胶片条；另外两个尚未实现',
         panelTileSplit: '焦点区高度占比',
         panelTileSplitHint: '0.15–0.85，拖分隔条会写回这里',
+        panelSkillHeight: '技能区高度',
+        panelSkillHeightHint: '40–360 像素，拖胶片条和技能区之间的分隔条会写回这里',
         panelFollowFrontTab: '焦点跟随最顶层标签',
         panelFollowFrontTabHint: '关掉时焦点只由你在画面里点选决定',
         streamFocusFps: '焦点帧率',
@@ -2509,6 +2926,8 @@ window.__ModuleLoader__.load({
         panelLayoutHint: 'focus is implemented (hero + filmstrip); the others are not yet',
         panelTileSplit: 'Hero height ratio',
         panelTileSplitHint: '0.15–0.85; dragging the splitter writes back here',
+        panelSkillHeight: 'Skill area height',
+        panelSkillHeightHint: '40–360 px; dragging the splitter under the filmstrip writes back here',
         panelFollowFrontTab: 'Follow the frontmost tab',
         panelFollowFrontTabHint: 'When off, the hero follows only your clicks',
         streamFocusFps: 'Hero framerate',
@@ -2886,7 +3305,7 @@ window.__ModuleLoader__.load({
     }
 
     /** 注册右侧栏 tab 类型与正文。 */
-    function attachPane(ctx, store, t, locale, insertTabChip) {
+    function attachPane(ctx, store, t, locale, insertTabChip, insertSkillChip) {
       const tabs = typeof ctx.get === 'function' ? ctx.get('sidebarRightTabs') : undefined;
       if (!tabs || typeof tabs.register !== 'function') return () => {};
       const stops = [];
@@ -2910,7 +3329,7 @@ window.__ModuleLoader__.load({
               name: PANE_TAB_SLOT,
               key: TAB_ID,
               ...(locale === undefined ? {} : { locale: LOCALE_NS }),
-              inject: () => ({ store, t, insertTabChip }),
+              inject: () => ({ store, t, insertTabChip, insertSkillChip }),
             },
             MirrorBody,
           ),
@@ -2992,7 +3411,8 @@ window.__ModuleLoader__.load({
 
         const stopCapsule = attachSeats(ctx, store, t, locale, sessionId);
         const insertTabChip = (sid, target) => insertTabReferenceChip(ctx, sid, target);
-        const stopPane = attachPane(ctx, store, t, locale, insertTabChip);
+        const insertSkillChip = (sid, skill) => insertSkillReferenceChip(ctx, sid, skill);
+        const stopPane = attachPane(ctx, store, t, locale, insertTabChip, insertSkillChip);
         const stopFollow = followPanelRequests(store, sessionId, openPanel);
 
         return () => {
@@ -3019,10 +3439,12 @@ window.__ModuleLoader__.load({
         // 等 inputTriggers 激活后再注册 codec，发送时才能展开芯片。
         ctx.inject(['inputTriggers'], (trigCtx) => {
           trigCtx.effect(() => attachTabReferenceSource(trigCtx), `${PLUGIN_NAME}: tab reference`);
+          trigCtx.effect(() => attachSkillReferenceSource(trigCtx), `${PLUGIN_NAME}: skill reference`);
         });
       } else {
         attachSettings(ctx);
         attachTabReferenceSource(ctx);
+        attachSkillReferenceSource(ctx);
       }
     };
 

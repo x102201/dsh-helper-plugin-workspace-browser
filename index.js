@@ -24,6 +24,8 @@
  */
 
 import { createCdpClient } from './lib/cdp.js';
+import { createPageDriver } from './lib/page-driver.js';
+import { loadPlaywrightCore } from './lib/playwright-runtime.js';
 import { createBrowserCommand } from './lib/command.js';
 import { createInstanceManager } from './lib/instance.js';
 import { createModelSubmitter } from './lib/model.js';
@@ -44,6 +46,8 @@ import { createSettingsSchema, normalizeSettings, SETTINGS_NAMESPACE } from './l
 import { createStreamRoute, STREAM_PATH } from './lib/stream.js';
 import { registerBrowserTools, TOOL_PREFIX } from './lib/tools.js';
 import { registerWriteTools } from './lib/write-tools.js';
+import { registerSaveSkillTool } from './lib/skill-tool.js';
+import { listSkills } from './lib/skills.js';
 
 /** 稳定插件名；也是 `cordis.patch.yml` 里的 row id。 */
 export const name = 'workspace-browser';
@@ -257,6 +261,7 @@ export function apply(ctx, config) {
           }
         },
         getCdpClient: getSharedClient,
+        browserRoot,
         warn,
       });
       webCtx.effect(() => webCtx.webServer.register(route), `${name}: control plane`);
@@ -264,6 +269,13 @@ export function apply(ctx, config) {
     } catch (error) {
       warn('控制面路由注册失败；胶囊会一直显示未启动', error);
     }
+  });
+
+  const pageDriver = createPageDriver({
+    getEndpoint: () => instance.endpoint,
+    loadPlaywright: () => loadPlaywrightCore({ dshHome: resolveDshHome() }),
+    info,
+    warn,
   });
 
   // ── 读类工具（P1） ────────────────────────────────────────────────────────
@@ -276,6 +288,7 @@ export function apply(ctx, config) {
         instance,
         browserRoot,
         readSettings,
+        pageDriver,
         warn,
         info,
       });
@@ -320,6 +333,7 @@ export function apply(ctx, config) {
         /* 关不掉也无所谓，下面直接换新实例 */
       }
       sharedCdpClient = null;
+      void pageDriver.disconnect();
     }
     if (sharedCdpClient === null) {
       sharedClientPort = wantPort;
@@ -350,6 +364,7 @@ export function apply(ctx, config) {
       const { registered } = registerWriteTools(toolsCtx, {
         instance,
         readSettings,
+        pageDriver,
         client: getSharedClient(),
         // 授权的真源是设置：要授权且还没授权就拦住。小面板与画面头上的
         // 「允许模型操作」写的就是 `toolsWriteAuthorized`（DESIGN.zh.md §6）。
@@ -364,6 +379,15 @@ export function apply(ctx, config) {
     } catch (error) {
       // 重名同样会让 dsh-tools 抛错；抓住它，胶囊与控制面照常工作。
       warn('写类工具注册失败；模型侧不会看到它们', error);
+    }
+  });
+
+  ctx.inject(['tools'], (toolsCtx) => {
+    try {
+      const { registered } = registerSaveSkillTool(toolsCtx, { browserRoot });
+      if (registered > 0) info('已注册保存浏览器技能的工具');
+    } catch (error) {
+      warn('保存技能工具注册失败', error);
     }
   });
 
@@ -423,6 +447,7 @@ export function apply(ctx, config) {
     try {
       const command = createBrowserCommand({
         instance,
+        listSkillNames: () => listSkills(browserRoot).map((skill) => skill.name),
         listTabs: async () => {
           const client = getSharedClient();
           await client.connect();
@@ -486,6 +511,7 @@ export function apply(ctx, config) {
     } catch {
       /* 同上 */
     }
+    void pageDriver.disconnect();
     void instance.dispose();
   }, `${name}: instance`);
 

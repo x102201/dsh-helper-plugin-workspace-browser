@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { composeAssignTabPrompt, composePrompt, createBrowserCommand, findUrl, normalizeUrl, stripNewFlag } from '../lib/command.js';
+import { composeAssignTabPrompt, composePrompt, composeSkillPrompt, createBrowserCommand, findUrl, normalizeUrl, parseSkillRequest, stripNewFlag } from '../lib/command.js';
 
 /** 造一套记录调用痕迹的假依赖。 */
 function harness(overrides = {}) {
@@ -36,6 +36,7 @@ function harness(overrides = {}) {
     submit: (agent, text) => {
       calls.submit.push({ agent, text });
     },
+    listSkillNames: () => overrides.skillNames ?? [],
     warn: () => {},
   };
   return { command: createBrowserCommand(deps), calls };
@@ -134,11 +135,24 @@ test('实例起不来：返回可读错误，不假装成功', async () => {
   assert.equal(calls.submit.length, 0);
 });
 
-test('composePrompt：空字段不产生空行', () => {
-  const text = composePrompt({ url: 'https://a.com' });
-  assert.ok(!text.includes('targetId：'), '没有 targetId 就不写这一行');
-  assert.ok(!text.includes('用户要求：'));
-  assert.ok(text.includes('targetId：') === false);
+test('composePrompt：气泡只露出要求，展开说明给模型和悬浮', () => {
+  const text = composePrompt({ instruction: '人民币和美元的汇率' });
+  assert.equal(
+    text,
+    '@"外部浏览器｜用本工作区的 Chrome 完成最后一个斜杠后面的要求。只能使用 workspace_browser_*：有 targetId 就先 select_tab，没有网址就自己 navigate 或 open_tab，然后 snapshot 再读或操作。不要用 DSH 自带的网页抓取、搜索，也不要调用 browser_*。/人民币和美元的汇率"',
+  );
+  assert.ok(!text.includes('\n'), 'mention 不能换行，否则气泡不会收成芯片');
+  assert.equal(text.slice(2, -1).split('/').at(-1), '人民币和美元的汇率');
+});
+
+test('composePrompt：只有网址时芯片是主机名，空字段不写进展开说明', () => {
+  const text = composePrompt({ url: 'https://a.com/x', title: '' });
+  assert.equal(text.slice(2, -1).split('/').at(-1), 'a.com');
+  assert.ok(text.includes('https://a.com/x'));
+  assert.ok(text.includes('workspace_browser_'));
+  assert.ok(!text.includes('｜targetId '), '没有 targetId 就不写这一段');
+  assert.ok(!text.includes('｜标题 '), '没有标题就不写这一段');
+  assert.ok(text.includes('处理给出的页面'));
 });
 
 test('composeAssignTabPrompt：用文件 mention 语法，标题在最后一段', () => {
@@ -150,4 +164,32 @@ test('composeAssignTabPrompt：用文件 mention 语法，标题在最后一段'
   assert.equal(text, '@"外部浏览器｜网址 https://example.com/x｜targetId TAB-9/示例"');
   assert.ok(!text.includes('\n'));
   assert.equal(text.slice(2, -1).split('/').at(-1), '示例');
+});
+
+test('parseSkillRequest：新增、保存、修改都只是意图线索', () => {
+  assert.deepEqual(parseSkillRequest('新增技能'), { mode: 'create', hint: '' });
+  assert.deepEqual(parseSkillRequest('新增skill'), { mode: 'create', hint: '' });
+  assert.deepEqual(parseSkillRequest('新增 skill 汇率对比'), { mode: 'create', hint: '汇率对比' });
+  assert.deepEqual(parseSkillRequest('保存skill'), { mode: 'save', hint: '' });
+  assert.deepEqual(parseSkillRequest('保存 skill 汇率对比'), { mode: 'save', hint: '汇率对比' });
+  assert.deepEqual(parseSkillRequest('修改skill'), { mode: 'update', hint: '' });
+  assert.deepEqual(parseSkillRequest('修改技能 汇率对比'), { mode: 'update', hint: '汇率对比' });
+  assert.equal(parseSkillRequest('保存成汇率对比'), null);
+  assert.equal(parseSkillRequest('看看 https://example.com'), null);
+});
+
+test('/browser 保存skill：先让模型确认意图，并带上已有名单', async () => {
+  const { command, calls } = harness({ skillNames: ['汇率对比'] });
+  const result = await command.handler({ rawInput: '保存skill' });
+  assert.equal(result.kind, 'success');
+  assert.match(result.text, /先确认/);
+  assert.equal(calls.openTab.length, 0, '保存技能不该开标签');
+  assert.equal(calls.submit.length, 1);
+  const text = calls.submit[0].text;
+  assert.ok(text.includes('先确认意图'));
+  assert.ok(text.includes('workspace_browser_save_skill'));
+  assert.ok(text.includes('已有技能：汇率对比'));
+  assert.ok(text.includes('不是 .dsh/skills'));
+  assert.equal(text.slice(2, -1).split('/').at(-1), '保存skill');
+  assert.equal(composeSkillPrompt({ mode: 'update', hint: '' }, '修改skill').slice(2, -1).split('/').at(-1), '修改skill');
 });

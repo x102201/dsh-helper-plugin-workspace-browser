@@ -166,6 +166,7 @@ test('宿主半边在严格 ctx 上注册全部 workspace_browser_* 工具，卸
     'workspace_browser_forward',
     'workspace_browser_reload',
     'workspace_browser_wait',
+    'workspace_browser_save_skill',
   ];
   assert.deepEqual([...names].sort(), [...readTools, ...writeTools].sort());
   assert.ok(

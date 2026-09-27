@@ -1,8 +1,6 @@
-# 工作区浏览器设计说明
+# 工作区浏览器：实现说明
 
-草案 **v0.7** · 2026-09-25
-
-给当前工作区起一个带调试端口的 Chrome。胶囊管开关和状态，右侧栏管看画面，模型用 `workspace_browser_*` 工具操作页面。
+这份文档给改代码的人。怎么安装、怎么用，看 [README.md](README.md)。这里按实现写：入口、状态、接口、目录和当时为什么这样定。同一条规则只在一处写完整。
 
 **怎么读**
 
@@ -11,11 +9,11 @@
 | 点一下会发生什么 | 第 1–4 节 |
 | 画面长什么样 | 第 5 节 |
 | 模型怎么用 | 第 6 节 |
-| 写代码时接口、目录、配置 | 第 7–8 节 |
-| 先做哪块、怎样算做完 | 第 9 节 |
+| 写代码时的接口、目录、配置 | 第 7–8 节 |
+| 各阶段做到什么算完成 | 第 9 节 |
 | 还没定的 | 第 10 节 |
 
-同一条规则只在一处写完整。文中的「已核实」表示本机 DSH 包里对过，不是猜的。
+文中的「已核实」表示在本机 DSH 里对过，不是猜的。
 
 名词就这五个：
 
@@ -49,15 +47,11 @@
 - **打开浏览器画面**
 - **允许模型操作**：还没授权时出现，见第 6 节
 
-胶囊可以在插件配置里关掉（`capsule.enabled`，默认开）。
+胶囊可以在插件配置里关掉（`capsuleEnabled`，默认开）。
 
-### 会话头部按钮：**已去掉**（用户决定）
+### 会话头部不放按钮
 
-原计划挂在 `conversation.session.header.utilities`（紧挨「在本地打开」的右边，`id: workspace-browser`，`order: -9`），**用户要求去掉**：
-
-> 在本地打开 旁边的 打开浏览器画面 图标不要了，因为打开侧边栏中也能打开
-
-理由成立：打开画面的入口已经有三个（胶囊小面板、`/browser`、启动后自动展开），会话头部再来一个只是噪声。插槽本身可用（`list` 型、`replaceRisk: none`），以后想加回来按这一节的原设计做即可。
+打开画面已经有胶囊小面板、`/browser` 和启动后自动展开。会话头部不再挂图标。插槽 `conversation.session.header.utilities` 本身可用（`list` 型），如果以后要加回来，用 `id: workspace-browser`，放在「在本地打开」旁边即可。
 
 ### `/browser`
 
@@ -69,7 +63,7 @@
 
 1. 小面板里的「打开浏览器画面」
 2. `/browser`
-3. 冷启动成功，且 `panel.autoOpenOnLaunch` 为开（默认开）
+3. 冷启动成功，且 `panelAutoOpenOnLaunch` 为开（默认开）
 
 刷新页面后右侧栏会回到收起。这是框架的限制，见第 7 节。
 
@@ -229,7 +223,7 @@ DSH 退出时浏览器默认继续活着（`instance.onDshExit = keep`）。可�
 
 ### 布局与拖拽
 
-P3 只做 `focus`，加上焦点区和胶片条之间的分隔条（写入 `panel.tileSplit`，默认 0.55）。`grid` 和 `single` 先留在配置里，界面上显示「即将提供」。把拖拽映射成真实窗口大小，这期不做。
+目前只做 `focus`：焦点区和胶片条之间的分隔条写入 `panelTileSplit`（默认 0.55），胶片条和技能区之间的分隔条写入 `panelSkillHeight`（默认 72）。`grid` 和 `single` 留在配置里，界面上显示尚未提供。拖拽不改变真实窗口大小。
 
 右栏有多宽、能不能浮出，用框架已有的能力，自己不重做：
 
@@ -238,7 +232,7 @@ P3 只做 `focus`，加上焦点区和胶片条之间的分隔条（写入 `pane
 | 右栏宽度 | `dsh-client-ui-layout` | 普通展开时有拖拽区；记住用户的像素宽度，上限约 70% |
 | 左右分栏 | dockkit | 最多两格，分隔条约 20%–80%。`split()` 空间不够时返回空 |
 | 浮出 | `float(tabId)` / `dock(paneId)` | 浮窗的拖动和缩放由框架负责。浮出后面板列收起也照样画 |
-| 焦点 / 胶片条 | 本插件 | 分隔条，持久化到 `panel.tileSplit` |
+| 焦点 / 胶片条 / 技能区 | 本插件 | 两条分隔条，写入 `panelTileSplit` 和 `panelSkillHeight` |
 
 刷新会收起右栏。全屏或右栏关闭时没有宽度拖拽区。
 
@@ -254,8 +248,8 @@ P3 只做 `focus`，加上焦点区和胶片条之间的分隔条（写入 `pane
 
 | 级别 | 工具 | 作用 |
 | --- | --- | --- |
-| 读 | `snapshot` | 标题、URL、正文、带编号的可点元素、表单。敏感值掩码 |
-| 读 | `get_text` | 一块区域的文字 |
+| 读 | `snapshot` | 先给可见正文（供总结），再给无障碍树编号 `e1`、`e2`。敏感值掩码 |
+| 读 | `get_text` | 默认读 `main` / `article` 的可见文字，默认最多 12000 字 |
 | 读 | `list_tabs` | 这个工作区的标签，没有「属于哪个会话」 |
 | 读 | `select_tab` | 改之后命令的默认标签，并把画面焦点切过去。不把窗口带到前台 |
 | 读 | `screenshot` | 一张 PNG |
@@ -269,6 +263,18 @@ P3 只做 `focus`，加上焦点区和胶片条之间的分隔条（写入 `pane
 写类工具返回实际作用的 `targetId`、url、title。
 
 页面正文按 DSH 的 `<UNTRUSTED_PAGE_CONTENT>` 包起来。
+
+能力提前写成一套，所有网站共用。模型每次只决定打开哪个网址、点哪个编号、正文怎么总结。模型不写页面脚本、CSS 或点击坐标。`evaluate` 默认关闭。截图不参与认元素。
+
+正文和点击走 `playwright-core` 的 `connectOverCDP`，连到已经启动的 Chrome。进程、标签、画面、截图仍走 CDP。第一次需要读写页面时，若插件旁和 `<DSH_HOME>/workspace-browser/vendor/` 都没有这个库，就在 vendor 里安装钉死的 `playwright-core`，不下载浏览器。装不上时读写工具返回 `playwright-missing`，浏览器和画面照常。编号只对当前快照有效；写操作返回新快照，树没变时只说明无变化。正文为空时返回 `page-empty` 和原因，不当作成功。
+
+### 技能
+
+跑通的任务可以存成技能，文件在 `<workspace>/.workspace-browser/skills/<名字>.md`。存的是步骤说明，不存编号。这不是宿主 `.dsh/skills` 里的 SKILL.md。
+
+新增和修改都在输入框里完成，胶片条下面不填表。用户输入 `/browser 新增技能`、`/browser 新增skill`、`/browser 保存skill` 或 `/browser 修改skill`，后面可以再带名字或补充。这些字只是线索。模型先复述意图（新建、把刚才的操作存下来，还是改已有技能），列出准备采用的名字和步骤，用户同意之后才调用 `workspace_browser_save_skill`（`confirm: true`）。修改用同一个名字覆盖。
+
+胶片条和技能区之间有分隔条，高度写入 `panelSkillHeight`（默认 72，40–360）。说明收在「Skill」上，鼠标停上去才展开。名字横排换行，停在名字上会变色。右键菜单向上展开，避免被底边挡住：加入对话、查看（打开工作区里的技能文件）、在文件资源管理器中显示。画面可见时大约每两秒重新读取名单，模型保存或修改之后右侧栏自己更新。输入框 `@` 插入同一张芯片：脸上只有技能名，发给模型时才展开全文。芯片不自动发送。评论和发送默认先停下来等用户确认。
 
 没装 Chrome、版本过低时，错误码是 `chrome-not-installed`、`chrome-version-unsupported`，带人话和 `hint.actions`（`install` / `set-path` / `recheck`）。实例未启动是 `browser-not-running`。启动过程失败是 `chrome-launch-failed`。
 
@@ -291,14 +297,15 @@ P3 只做 `focus`，加上焦点区和胶片条之间的分隔条（写入 `pane
 | `/browser https://… 后面的话` | 同上 | 再加上这段话，并写明必须用 `workspace_browser_*` |
 | `/browser 一段没有网址的话` | `ensure()`，打开画面，不开标签 | 整段话，由模型自己 `navigate` / `open_tab` |
 | `/browser --new https://…` | 即使已有相同网址也新开一张 | 同有网址的一行 |
+| `/browser 新增技能`、`新增skill`、`保存skill`、`修改skill` | `ensure()`，打开画面，把已有技能名一并交给模型 | 先确认意图，用户同意后才调用 `workspace_browser_save_skill` |
 
-`--new` 后面没有网址：返回错误文字，不启动、不给模型发消息。
+`--new` 后面没有网址：返回错误文字，不启动、不给模型发消息。技能命令后面的字只是线索，不当作已经定下的名字。
 
 已在运行时复用标签，不抢焦点。用户要看真实窗口，点画面上的「切到前台」。
 
 打开画面的信号走 `GET /status` 里的 `panelOpen: { sessionId, epoch }`。只有会话 id 对得上的那个胶囊去 `openTab`。画面的 WebSocket 承担不了这件事，因为画面还没打开时连接还不存在。没有挂上会话面时，`openTab` 会抛错，接住后只留文字提示。
 
-交给模型的话要写明：用 `workspace_browser_*`，不要用 DSH 自带的抓取。
+交给模型的是一条文件 mention（`@"外部浏览器｜…/<标签>"`）。气泡默认只显示最后一个斜杠后面的标签（用户的要求；没有要求时用页面标题或主机名），整段说明不铺开。鼠标悬停的提示和模型收到的是同一段：用本工作区的 Chrome，只能调用 `workspace_browser_*`；有 targetId 就先 `select_tab`，没有网址就自己 `navigate` 或 `open_tab`，然后 `snapshot`。不要用 DSH 自带的网页抓取、搜索，也不要调用 `browser_*`。
 
 ---
 
@@ -311,7 +318,7 @@ P3 只做 `focus`，加上焦点区和胶片条之间的分隔条（写入 `pane
 | 放什么 | 插槽 | 注意 |
 | --- | --- | --- |
 | 胶囊 | `conversation.input.right` | list。不要碰 `conversation.input.model`，那是模型选择器 |
-| ~~头部按钮~~ | ~~`conversation.session.header.utilities`~~ | **已去掉**（用户要求；打开画面从胶囊或右侧栏本身走） |
+| 会话头部 | 不使用 `conversation.session.header.utilities` | 打开画面从胶囊或右侧栏走 |
 | 画面正文 | `sidebar.right.pane.tab`，key = `workspace-browser/mirror` | 先 `sidebarRightTabs.register`，`kind` 为 `workspace-browser-mirror` |
 | 设置卡片 | `settings.plugin.item`，key = 下面的 namespace | 没有这张卡片，设置页里就看不到 |
 
@@ -334,6 +341,10 @@ P3 只做 `focus`，加上焦点区和胶片条之间的分隔条（写入 `pane
 | POST | `/cross-origin` | body `{ enabled }`，写入设置并重启 |
 | POST | `/delete-data` | 停止并删除这个工作区的 profile 目录 |
 | GET | `/targets` | 标签列表，无会话归属 |
+| GET | `/skills` | 技能名单；`?name=` 取全文和发给模型的展开文本 |
+| POST | `/skills/locate` | body `{ name, action }`。`open` 打开技能文件，`reveal` 在文件资源管理器中选中 |
+| POST | `/skills` | 确认后保存技能（body 里 `confirm: true`） |
+| DELETE | `/skills` | 删除一个技能 |
 
 `status.chrome`：`state` 为 `ok | missing | too-old | ambiguous | probing`，外加 `path`、`version`、`minVersion`、`candidates`。
 
@@ -381,7 +392,7 @@ ctx.commands.register({
 
 设置：`ctx.settings.register('dsh-helper-plugin-workspace-browser', schema)`。namespace 要匹配 `/^[a-z][a-z0-9-]*$/`。存在 `<DSH_HOME>/settings.yaml`。客户端用 `ctx.settingsScope.bind({ namespace })` 读写。界面路径是 **设置 → 插件 → 插件配置**。`plugin-inventory` 只是清单，不是配置页。
 
-`stream.*`、`panel.*`、`capsule.*` 立即生效。`chrome.*`、`instance.*` 改完要重启实例，并先提示。
+`stream*`、`panel*`、`capsule*` 立即生效。`chrome*`、`instance*` 改完要重启实例，并先提示。
 
 安装时若 `cordis.patch.yml` 里已经 insert 了同一个 loader id，会报 `duplicate loader entry id`。README 里要写这一步。
 
@@ -444,17 +455,19 @@ Chrome 136 起，调试端口必须配非默认的 `--user-data-dir`。`--remote
 ### 目录
 
 ```
-<workspace>/.workspace-browser/          # 点开头 + 隐藏属性，用户默认看不到
-├── .gitignore          # 内容 `*`，让 git 自动忽略整个目录
+<workspace>/.workspace-browser/          # 点开头 + 隐藏属性
+├── .gitignore          # 内容 `*`
 ├── chrome-profile/     # Chrome 自己维护（--user-data-dir）
+├── skills/             # 技能说明
+├── shots/              # 截图
 └── endpoint.json       # 本插件写，只是线索
 ```
 
 未分组会话（没有工作区）退回 `<DSH_HOME>/workspace-browser/_ungrouped/`。
 
-> **这条在实现后被用户改过一次**：v0.7 原本写的是"放 `DSH_HOME`，不进工作区的 git 和文件索引"。用户的实际预期是**浏览器数据该在项目目录里**，所以改成工作区下的隐藏子目录。代价用三招抵消：目录点开头 + `attrib +H` 隐藏；目录里放一份自忽略的 `.gitignore`；**工作区里已经有 `.gitignore` 时再往里追加一行 `.workspace-browser/`**（幂等，且不替用户新建那个文件）。删工作区 = 连数据一起清，这也是用户要的语义。
+数据放在工作区里，是为了删工作区时一起清掉。目录点开头，Windows 上再加隐藏属性。目录内有一份内容为 `*` 的 `.gitignore`。工作区已经有 `.gitignore` 时追加一行 `.workspace-browser/`，没有那个文件就不代为创建。
 
-`chrome-profile` 有数千个文件、还含 Cookie。若确实不想让它落在工作区，请用下面的 `chrome.userDataDir` 指到别处。
+`chrome-profile` 有数千个文件，还含 Cookie。
 
 ```json
 {
@@ -469,34 +482,37 @@ Chrome 136 起，调试端口必须配非默认的 `--user-data-dir`。`--remote
 }
 ```
 
-profile 有数千个文件，还含 Cookie。放在 `DSH_HOME` 是为了不进工作区的 git 和文件索引。`endpoint.json` 按当前用户最小权限来写。文件在，不代表浏览器还活着。
+`endpoint.json` 按当前用户最小权限来写。文件在，不代表浏览器还活着。
 
 ### 配置项
 
+键是扁平的 camelCase，和 `settings.yaml` 里看到的一致。
+
 | 键 | 默认 | 说明 |
 | --- | --- | --- |
-| `capsule.enabled` | 开 | 显示胶囊 |
-| `capsule.showPort` | 开 | 文案里带端口 |
-| `panel.autoOpenOnLaunch` | 开 | 冷启动成功后展开当前会话的画面 |
-| `panel.layout` | `focus` | `grid` / `single` 这期不实现 |
-| `panel.tileSplit` | `0.55` | 焦点区高度占比 |
-| `panel.followFrontTab` | 关 | 焦点跟最顶层标签 |
-| `stream.focusFps` / `maxWidth` / `quality` | `2` / `960` / `70` | 质量是 0–100 |
-| `stream.thumbFps` / `maxWidth` / `quality` | `0.25` / `160` / `50` | 帧率为 0 表示不要缩略图 |
-| `chrome.path` | 空 | 手动指定的 chrome.exe |
-| `chrome.crossOrigin` | 关 | 见第 4 节的两个参数 |
-| `instanceRestoreTabsOnReopen` | 开 | 用户再次启动时恢复标签；这就是"继续浏览上次打开的网页" |
-| `startupUrl` | 空 | **默认起始页**：没有可恢复标签时开它，留空开 `about:blank` |
-| `instance.onDshExit` | `keep` | `keep` 或 `close` |
-| `tools.writeRequireApproval` | 关 | 打开后，写操作要先点「允许模型操作」 |
-| `tools.writeAuthorized` | 关 | 用户点过允许之后为开 |
-| `tools.exposeEvaluate` | 关 | 为开才注册 `evaluate` |
+| `capsuleEnabled` | 开 | 显示胶囊 |
+| `capsuleShowPort` | 开 | 文案里带端口 |
+| `panelAutoOpenOnLaunch` | 开 | 冷启动成功后展开当前会话的画面 |
+| `panelLayout` | `focus` | `grid` / `single` 尚未实现 |
+| `panelTileSplit` | `0.55` | 焦点区高度占比 |
+| `panelSkillHeight` | `72` | 技能区高度，像素，40–360 |
+| `panelFollowFrontTab` | 关 | 焦点跟最顶层标签 |
+| `streamFocusFps` / `streamFocusMaxWidth` / `streamFocusQuality` | `2` / `960` / `70` | 质量是 1–100 的整数 |
+| `streamThumbFps` / `streamThumbMaxWidth` / `streamThumbQuality` | `0.25` / `160` / `50` | 帧率为 0 表示不要缩略图 |
+| `chromePath` | 空 | 手动指定的 chrome.exe |
+| `chromeCrossOrigin` | 关 | 见第 4 节的两个参数 |
+| `instanceRestoreTabsOnReopen` | 开 | 再次启动时恢复标签 |
+| `startupUrl` | 空 | 没有可恢复标签时打开的网址，留空则是空白页 |
+| `instanceOnDshExit` | `keep` | `keep` 或 `close` |
+| `toolsWriteRequireApproval` | 关 | 打开后，写操作要先点「允许模型操作」 |
+| `toolsWriteAuthorized` | 关 | 点过允许之后为开 |
+| `toolsExposeEvaluate` | 关 | 为开才注册 `evaluate` |
 
 ---
 
-## 9. 实现顺序
+## 9. 各阶段的完成标准
 
-每阶段做完，对得上右边的现象即可。
+下面是交付时的切分，用来对照「怎样算做完」。阶段名留着，是为了和测试脚本、提交说明对得上。
 
 ### P0 拉得起、停得下
 
@@ -631,7 +647,7 @@ chrome.exe --headless=new --remote-debugging-port=0 --user-data-dir=<临时目�
 - 设置：`@deepseek-ai/dsh-settings`、`dsh-client-ui-settings-plugins`；范例 `dsh-web-search-deepseek`
 - HTTP / WebSocket：`@deepseek-ai/dsh-host-webserver`；范例 `dsh-api-gateway`
 - 命令：`@deepseek-ai/dsh-commands`；范例 `/plan`（`agent.steer`）、`/goal`（`agent.followup`）
-- 更细的插槽摘录见 `BROWSER_PLUGIN_SLOT_RESEARCH.zh.md`
+- 插槽名以当时装上的 `@deepseek-ai/dsh-cordis-client-runner` 为准
 
 ### 草案记录
 

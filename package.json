@@ -1,7 +1,7 @@
 {
   "name": "dsh-helper-plugin-workspace-browser",
   "version": "0.1.0",
-  "description": "dsh plugin: 给当前工作区起一个带调试端口的真实 Chrome —— 胶囊管开关与状态，右侧栏管看画面，模型用 workspace_browser_* 工具操作页面。",
+  "description": "DSH 插件：为当前工作区单独启动一个 Chrome，在右侧栏看画面，并用 workspace_browser_* 让模型阅读和操作页面。",
   "keywords": [
     "dsh",
     "dsh-plugin",
@@ -56,7 +56,7 @@
     }
   },
   "scripts": {
-    "test": "node scripts/check-encoding.mjs && node test/smoke.test.mjs && node test/host.test.mjs && node test/cdp.test.mjs && node test/tools.test.mjs && node test/write-tools.test.mjs && node test/screencast.test.mjs && node test/stream.test.mjs && node test/command.test.mjs && node test/model.test.mjs",
+    "test": "node scripts/check-encoding.mjs && node test/smoke.test.mjs && node test/host.test.mjs && node test/cdp.test.mjs && node test/tools.test.mjs && node test/write-tools.test.mjs && node test/screencast.test.mjs && node test/stream.test.mjs && node test/command.test.mjs && node test/model.test.mjs && node test/page-driver.test.mjs && node test/skills.test.mjs",
     "test:encoding": "node scripts/check-encoding.mjs",
     "verify:p0": "node scripts/verify-p0.mjs",
     "verify:live": "node scripts/verify-live.mjs"
