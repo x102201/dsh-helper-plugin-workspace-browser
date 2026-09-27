@@ -28,15 +28,23 @@ DSH 插件。给**当前工作区**单独开一个带调试端口的 Chrome：�
 
 ## 安装
 
-需要 Node.js 20 或更高，以及本机的 Chrome。
+需要 Node.js 20 或更高，以及本机的 Chrome。两条命令都会改当前 web profile 的 `package.json`（依赖和 `dsh.profile.bundles`）。装完后重启 `dsh --profile web`（或 `dsh web`）。bundle 列表只在启动时读一次。
+
+### 通过 GitHub 安装（推荐）
+
+不用先克隆仓库。`github:` 协议把 [这个仓库](https://github.com/x102201/dsh-helper-plugin-workspace-browser) 装进 profile。
+
+```bash
+dsh plugin --profile web add github:x102201/dsh-helper-plugin-workspace-browser
+```
+
+### 通过 link 协议安装
+
+本机已经有一份源码、要跟着改的时候用。`link:` 把 profile 的 `node_modules` 指到这个目录，改完重启就用到这份文件。路径必须是绝对路径。Windows 上权限不够时用 junction。
 
 ```bash
 dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-browser
 ```
-
-装完后重启 `dsh --profile web`（或 `dsh web`）。bundle 列表只在启动时读一次。
-
-从源码安装时，`dsh plugin add` 会改 profile 的 `package.json`（依赖和 `dsh.profile.bundles`），并在 `node_modules` 里链到本目录。Windows 上权限不够时用 junction。
 
 两件容易撞上的事：
 

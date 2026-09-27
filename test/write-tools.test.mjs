@@ -104,6 +104,7 @@ async function setup(options = {}) {
     instance: runningInstance(fake),
     client,
     readSettings: () => settings,
+    pageDriver: options.pageDriver,
     commandTimeoutMs: options.commandTimeoutMs ?? 4000,
     // 生产默认是 1500ms。假 Chrome 不会自己派发 `Page.frameNavigated`，每跳都要等满，
     // 所以测试里压到 150ms —— 它只影响「标题/网址有多新」，不影响任何断言。
@@ -478,6 +479,43 @@ test('授权后 navigate：Page.navigate 带 URL，返回值反映导航后的 u
   assert.equal(ok.targetId, 'TAB-1');
   assert.equal(ok.url, 'https://example.com/after');
   assert.equal(ok.title, '导航后');
+});
+
+test('页面驱动的 scroll 只返回 schema 声明的字段', async (t) => {
+  const env = await setup({
+    settings: SETTINGS_AUTHORIZED,
+    pageDriver: {
+      async act(name, payload) {
+        assert.equal(name, 'scroll');
+        assert.equal(payload.args.direction, 'down');
+        assert.equal(payload.args.amount, 4000);
+        return {
+          ok: true,
+          targetId: 'TAB-1',
+          url: 'https://example.com',
+          title: '例',
+          text: '正文',
+          textTruncated: false,
+          elementsTruncated: false,
+          clickables: [],
+          fields: [],
+          unchanged: false,
+          detail: 'scroll 完成。',
+        };
+      },
+    },
+  });
+  t.after(() => env.close());
+
+  const scrolled = await env.call(WRITE_TOOL_NAMES.scroll, { direction: 'down', amount: 4000 });
+  assert.deepEqual(scrolled, {
+    ok: true,
+    targetId: 'TAB-1',
+    url: 'https://example.com',
+    title: '例',
+    detail: 'scroll 完成。',
+  });
+  assert.equal(env.of('Input.dispatchMouseEvent').length, 0, '走页面驱动时不再发 CDP 滚轮');
 });
 
 test('授权后 scroll / press：滚轮事件与按键事件的参数正确', async (t) => {

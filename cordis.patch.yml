@@ -3,6 +3,7 @@
 # package.json 的 `dsh.bundle.patch` 指向本文件，所以把这个包装进 profile
 # bundle 就够了：
 #
+#   dsh plugin --profile web add github:x102201/dsh-helper-plugin-workspace-browser
 #   dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-browser
 #
 # `dsh plugin ... add` 会按已安装状态重建 `dsh.profile.bundles`，本包因此自动

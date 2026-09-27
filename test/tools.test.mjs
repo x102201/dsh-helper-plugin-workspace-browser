@@ -757,6 +757,7 @@ function toolsForHarness(harness, options = {}) {
     browserRoot: harness.browserRoot,
     readSettings: () => ({}),
     probeChrome: async () => ({ state: 'ok' }),
+    pageDriver: options.pageDriver,
     commandTimeoutMs: options.commandTimeoutMs ?? 3000,
     warn: () => {},
     info: () => {},
@@ -787,6 +788,40 @@ test('端到端：snapshot 拿到标题、正文、编号元素与掩码字段',
   assert.ok(rendered.includes(UNTRUSTED_OPEN) && rendered.includes('</UNTRUSTED_PAGE_CONTENT>'), '页面内容必须包起来');
   assert.ok(!rendered.includes('hunter2'), '渲染文本里不能出现密码');
   assert.ok(rendered.includes('可点元素'), '渲染里要有清单');
+});
+
+test('页面驱动的 snapshot 会丢掉 schema 没声明的字段', async (t) => {
+  const harness = await startToolHarness();
+  const tools = toolsForHarness(harness, {
+    pageDriver: {
+      async snapshot() {
+        return {
+          ok: true,
+          targetId: 'TAB-1',
+          url: 'https://example.com',
+          title: '例',
+          text: '正文',
+          textTruncated: false,
+          elementsTruncated: false,
+          clickables: [],
+          fields: [],
+          unchanged: false,
+          detail: '不该出现',
+        };
+      },
+    },
+  });
+  t.after(async () => {
+    tools.dispose();
+    await harness.cleanup();
+  });
+
+  const definition = tools.definitions.find((candidate) => candidate.name === TOOL_NAMES.snapshot);
+  const { value } = await runTool(definition, {});
+  assert.deepEqual(valueViolations(definition.output.schema, value), []);
+  assert.equal(value.text, '正文');
+  assert.equal(Object.hasOwn(value, 'unchanged'), false);
+  assert.equal(Object.hasOwn(value, 'detail'), false);
 });
 
 test('端到端：get_text 取区域文字，选择器不命中给结构化错误', async (t) => {

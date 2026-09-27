@@ -95,6 +95,21 @@ test('快照先有正文，点击只认当前编号', async () => {
   assert.equal(stale.error.code, 'ref-stale');
 });
 
+test('evaluate 返回 schema 需要的字符串结果', async () => {
+  const { page } = fakePage();
+  const driver = createPageDriver({
+    getEndpoint: () => ({ port: 9 }),
+    pageFor: async () => page,
+  });
+  const result = await driver.act('evaluate', { targetId: 't1', args: { expression: 'document.title' } });
+  assert.equal(result.ok, true);
+  assert.equal(result.value, 'document.title');
+  assert.equal(result.valueType, 'string');
+  assert.equal(result.truncated, false);
+  assert.equal(result.url, 'https://example.com/post');
+  assert.equal(result.title, '文章');
+});
+
 test('空页面不报成功', async () => {
   const { page } = fakePage({ empty: true, text: '', aria: '', url: 'https://example.com' });
   const driver = createPageDriver({
