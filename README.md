@@ -76,8 +76,8 @@ dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-
 在输入框里发起：
 
 - `/browser 新增技能` 或 `/browser 新增skill`
-- `/browser 保存skill`
-- `/browser 修改skill`
+- `/browser 保存技能` 或 `/browser 保存skill`
+- `/browser 修改技能` 或 `/browser 修改skill`
 
 后面可以再带名字。这些字只是线索。模型会先复述它理解的意图和步骤，你同意之后才写入。修改是用同一个名字覆盖。
 

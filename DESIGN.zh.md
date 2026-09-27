@@ -272,7 +272,7 @@ DSH 退出时浏览器默认继续活着（`instance.onDshExit = keep`）。可�
 
 跑通的任务可以存成技能，文件在 `<workspace>/.workspace-browser/skills/<名字>.md`。存的是步骤说明，不存编号。这不是宿主 `.dsh/skills` 里的 SKILL.md。
 
-新增和修改都在输入框里完成，胶片条下面不填表。用户输入 `/browser 新增技能`、`/browser 新增skill`、`/browser 保存skill` 或 `/browser 修改skill`，后面可以再带名字或补充。这些字只是线索。模型先复述意图（新建、把刚才的操作存下来，还是改已有技能），列出准备采用的名字和步骤，用户同意之后才调用 `workspace_browser_save_skill`（`confirm: true`）。修改用同一个名字覆盖。
+新增和修改都在输入框里完成，胶片条下面不填表。用户输入 `/browser 新增技能` 或 `/browser 新增skill`、`/browser 保存技能` 或 `/browser 保存skill`、`/browser 修改技能` 或 `/browser 修改skill`，后面可以再带名字或补充。这些字只是线索。模型先复述意图（新建、把刚才的操作存下来，还是改已有技能），列出准备采用的名字和步骤，用户同意之后才调用 `workspace_browser_save_skill`（`confirm: true`）。修改用同一个名字覆盖。
 
 胶片条和技能区之间有分隔条，高度写入 `panelSkillHeight`（默认 72，40–360）。说明收在「Skill」上，鼠标停上去才展开。名字横排换行，停在名字上会变色。右键菜单向上展开，避免被底边挡住：加入对话、查看（打开工作区里的技能文件）、在文件资源管理器中显示。画面可见时大约每两秒重新读取名单，模型保存或修改之后右侧栏自己更新。输入框 `@` 插入同一张芯片：脸上只有技能名，发给模型时才展开全文。芯片不自动发送。评论和发送默认先停下来等用户确认。
 
@@ -297,7 +297,7 @@ DSH 退出时浏览器默认继续活着（`instance.onDshExit = keep`）。可�
 | `/browser https://… 后面的话` | 同上 | 再加上这段话，并写明必须用 `workspace_browser_*` |
 | `/browser 一段没有网址的话` | `ensure()`，打开画面，不开标签 | 整段话，由模型自己 `navigate` / `open_tab` |
 | `/browser --new https://…` | 即使已有相同网址也新开一张 | 同有网址的一行 |
-| `/browser 新增技能`、`新增skill`、`保存skill`、`修改skill` | `ensure()`，打开画面，把已有技能名一并交给模型 | 先确认意图，用户同意后才调用 `workspace_browser_save_skill` |
+| `/browser 新增技能` 或 `新增skill`；`保存技能` 或 `保存skill`；`修改技能` 或 `修改skill` | `ensure()`，打开画面，把已有技能名一并交给模型 | 先确认意图，用户同意后才调用 `workspace_browser_save_skill` |
 
 `--new` 后面没有网址：返回错误文字，不启动、不给模型发消息。技能命令后面的字只是线索，不当作已经定下的名字。
 

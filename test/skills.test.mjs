@@ -34,7 +34,9 @@ test('技能要确认才保存，芯片展开才包含步骤', () => {
     assert.match(skill.mention, /workspace_browser_/);
     assert.equal(composeSkillMention(skill).endsWith('/小红书评论"'), true);
     assert.match(SKILL_USAGE, /\/browser 新增技能/);
+    assert.match(SKILL_USAGE, /\/browser 保存技能/);
     assert.match(SKILL_USAGE, /\/browser 保存skill/);
+    assert.match(SKILL_USAGE, /\/browser 修改技能/);
     assert.match(SKILL_USAGE, /\/browser 修改skill/);
 
     assert.equal(deleteSkill(root, '小红书评论').ok, true);

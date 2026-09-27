@@ -171,8 +171,10 @@ test('parseSkillRequest：新增、保存、修改都只是意图线索', () => 
   assert.deepEqual(parseSkillRequest('新增skill'), { mode: 'create', hint: '' });
   assert.deepEqual(parseSkillRequest('新增 skill 汇率对比'), { mode: 'create', hint: '汇率对比' });
   assert.deepEqual(parseSkillRequest('保存skill'), { mode: 'save', hint: '' });
+  assert.deepEqual(parseSkillRequest('保存技能'), { mode: 'save', hint: '' });
   assert.deepEqual(parseSkillRequest('保存 skill 汇率对比'), { mode: 'save', hint: '汇率对比' });
   assert.deepEqual(parseSkillRequest('修改skill'), { mode: 'update', hint: '' });
+  assert.deepEqual(parseSkillRequest('修改技能'), { mode: 'update', hint: '' });
   assert.deepEqual(parseSkillRequest('修改技能 汇率对比'), { mode: 'update', hint: '汇率对比' });
   assert.equal(parseSkillRequest('保存成汇率对比'), null);
   assert.equal(parseSkillRequest('看看 https://example.com'), null);
@@ -190,6 +192,6 @@ test('/browser 保存skill：先让模型确认意图，并带上已有名单', 
   assert.ok(text.includes('workspace_browser_save_skill'));
   assert.ok(text.includes('已有技能：汇率对比'));
   assert.ok(text.includes('不是 .dsh/skills'));
-  assert.equal(text.slice(2, -1).split('/').at(-1), '保存skill');
-  assert.equal(composeSkillPrompt({ mode: 'update', hint: '' }, '修改skill').slice(2, -1).split('/').at(-1), '修改skill');
+  assert.equal(text.slice(2, -1).split('/').at(-1), '保存技能');
+  assert.equal(composeSkillPrompt({ mode: 'update', hint: '' }, '修改skill').slice(2, -1).split('/').at(-1), '修改技能');
 });
