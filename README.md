@@ -1,5 +1,7 @@
 # dsh-helper-plugin-workspace-browser
 
+![工作区浏览器：胶囊菜单和右侧实时画面](docs/workspace-browser.png)
+
 DSH 插件。给**当前工作区**单独开一个带调试端口的 Chrome：你在右侧栏看画面，模型用 `workspace_browser_*` 阅读和操作页面。
 
 它不接管你日常使用的那个浏览器，也不安装扩展。每个工作区有自己的登录态。本机需要已经装好 Chrome；插件不会代为下载浏览器。
