@@ -2840,12 +2840,13 @@ window.__ModuleLoader__.load({
 
     // ── 插件配置卡片 ──────────────────────────────────────────────────────────
     //
-    // 「设置 → 插件 → 插件配置」里能不能看到本插件，取决于**两份账本的交集**：
-    // 宿主注册了同名 settings namespace，**并且**浏览器半边在插槽
-    // `settings.plugin.item` 注册了 key = namespace 的卡片。只有前者时那一栏是空的
-    // —— 这正是本项目第一版的状态（宿主挂好了，卡片没写）。
-
-    const SETTINGS_NS = 'dsh-helper-plugin-workspace-browser';
+    // 「插件」面板里能不能看到本插件的配置页，取决于**两份账本的交集**：
+    // 宿主那一行的 settings namespace 被服务提供（0.2 由导出的 `Config` 自动描述），
+    // **并且**浏览器半边把页面注册进 `plugins.bundle.config`（键 = 包名）。
+    //
+    // ⚠️ 0.2 的 namespace 是 **Loader row id**（`cordis.patch.yml` 的 `id:
+    // workspace-browser`），不是包名：`configForms.get()` 按行 id 查表。
+    const SETTINGS_NS = 'workspace-browser';
     const SETTINGS_LOCALE_NS = 'workspace-browser-settings';
 
     /** 与宿主 `lib/settings.js` 的默认值保持一致。 */
@@ -3370,26 +3371,22 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 注册「设置 → 插件 → 插件配置」里的卡片。
+     * 注册「插件」面板里本插件包页面上的卡片。
      *
-     * 走嵌套 `inject(['slots','settingsScope'])`：没有设置服务的 profile 里，
-     * 胶囊与画面照常工作，只是没有这张卡片。
+     * 走嵌套 `inject(['configForms'])`：没有设置服务的 profile 里，胶囊与画面照常
+     * 工作，只是没有这张卡片。
      *
      * @param {object} owner - 注入后的上下文。
      * @returns {void}
      */
     function attachSettings(owner) {
       owner.effect(() => {
-        if (!owner.settingsScope || typeof owner.settingsScope.bind !== 'function') return () => {};
+        if (!owner.configForms || typeof owner.configForms.get !== 'function') return () => {};
         if (!owner.slots || typeof owner.slots.inject !== 'function') return () => {};
         if (!React || typeof React.createElement !== 'function') return () => {};
 
-        let scope;
-        try {
-          scope = owner.settingsScope.bind({ namespace: SETTINGS_NS });
-        } catch {
-          return () => {};
-        }
+        // 共享表单：namespace 就是宿主那一行的 id。
+        const scope = owner.configForms.get(SETTINGS_NS);
         const store = createSettingsStore(scope);
 
         const locale = typeof owner.get === 'function' ? owner.get('locale') : undefined;
@@ -3399,16 +3396,17 @@ window.__ModuleLoader__.load({
           : (key) => SETTINGS_COPY.zh[key] ?? SETTINGS_COPY.en[key] ?? key;
 
         try {
-          console.info(`[${PLUGIN_NAME}] 注册插件配置卡片：${SETTINGS_NS}`);
+          console.info(`[${PLUGIN_NAME}] 注册插件页面：${SETTINGS_NS}`);
         } catch {
           /* 忽略 */
         }
 
-        const stopSlot = owner.slots.inject('settings.plugin.item', function* register() {
+        const registerPage = () => owner.slots.inject('plugins.bundle.config', function* register() {
           yield owner.slots.register(
             {
-              name: 'settings.plugin.item',
-              key: SETTINGS_NS,
+              name: 'plugins.bundle.config',
+              // 键 = 包名：面板按 `pkg.name` 派发，所以卡片长在本插件自己的包页面上。
+              key: PLUGIN_NAME,
               ...(locale === undefined ? {} : { locale: SETTINGS_LOCALE_NS }),
               inject: () => ({
                 hooks: { workspaceBrowserSettings: store },
@@ -3420,6 +3418,11 @@ window.__ModuleLoader__.load({
             SettingsCard,
           );
         });
+        // `whileServed` 只在宿主真的提供这个 namespace 时挂页面 —— 没有该行的
+        // 部署不会看到任何痕迹。
+        const stopSlot = typeof owner.configForms.whileServed === 'function'
+          ? owner.configForms.whileServed([SETTINGS_NS], registerPage)
+          : registerPage();
         return () => {
           if (typeof stopSlot === 'function') stopSlot();
         };
@@ -3498,48 +3501,74 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** 注册右侧栏 tab 类型与正文。 */
+    /**
+     * 注册右侧栏 tab 类型与正文。
+     *
+     * ⚠️ `sidebarRightTabs` 必须走**嵌套 inject**：这个服务由右侧栏插件 provide，
+     * 而本插件的客户端模块是 stage-one 预取的（`dsh.client.immediately`），apply
+     * 往往比它早。一次性 `ctx.get` 读不到就 return，服务随后就绪也不会重试 ——
+     * 表现就是「胶囊在，但右侧栏永远打不开工作区浏览器那一页」。
+     *
+     * @param {object} ctx - 客户端上下文。
+     * @param {object} store - 状态仓库。
+     * @param {Function} t - 翻译。
+     * @param {object | undefined} locale - 语言服务。
+     * @param {Function} insertTabChip - 插入标签芯片。
+     * @param {Function} insertSkillChip - 插入技能芯片。
+     * @returns {() => void} 取消注册。
+     */
     function attachPane(ctx, store, t, locale, insertTabChip, insertSkillChip) {
+      const register = (tabs) => {
+        const stops = [];
+        try {
+          stops.push(
+            tabs.register({
+              id: TAB_ID,
+              kind: TAB_KIND,
+              priority: 'extension',
+              title: () => t('panelTitle'),
+              guide: [{ id: TAB_ID, order: 20, title: () => t('panelTitle') }],
+            }),
+          );
+        } catch (error) {
+          // 重复注册（HMR 重挂）或 kind 冲突：记一条日志，不要再静默吞掉。
+          try {
+            console.warn(`[${PLUGIN_NAME}] 注册右侧栏 tab 类型失败：${error instanceof Error ? error.message : String(error)}`);
+          } catch { /* 忽略日志失败 */ }
+        }
+        stops.push(
+          ctx.slots.inject(PANE_TAB_SLOT, () =>
+            ctx.slots.register(
+              {
+                name: PANE_TAB_SLOT,
+                key: TAB_ID,
+                ...(locale === undefined ? {} : { locale: LOCALE_NS }),
+                inject: () => ({
+                  store,
+                  t,
+                  insertTabChip,
+                  insertSkillChip,
+                  openSkillInSidebar: (sessionId, filePath) => openSkillInSidebar(ctx, sessionId, filePath),
+                }),
+              },
+              MirrorBody,
+            ),
+          ),
+        );
+        return () => {
+          for (const stop of stops) {
+            if (typeof stop === 'function') stop();
+          }
+        };
+      };
+
+      if (typeof ctx.inject === 'function') {
+        // 服务晚就绪也能补上：inject 会在 `sidebarRightTabs` 出现后重跑。
+        return ctx.inject(['sidebarRightTabs'], (child) => register(child.sidebarRightTabs));
+      }
       const tabs = typeof ctx.get === 'function' ? ctx.get('sidebarRightTabs') : undefined;
       if (!tabs || typeof tabs.register !== 'function') return () => {};
-      const stops = [];
-      try {
-        stops.push(
-          tabs.register({
-            id: TAB_ID,
-            kind: TAB_KIND,
-            priority: 'extension',
-            title: () => t('panelTitle'),
-            guide: [{ order: 20, title: () => t('panelTitle') }],
-          }),
-        );
-      } catch {
-        // 重复注册（例如 HMR 重挂）不该让整块失败。
-      }
-      stops.push(
-        ctx.slots.inject(PANE_TAB_SLOT, () =>
-          ctx.slots.register(
-            {
-              name: PANE_TAB_SLOT,
-              key: TAB_ID,
-              ...(locale === undefined ? {} : { locale: LOCALE_NS }),
-              inject: () => ({
-                store,
-                t,
-                insertTabChip,
-                insertSkillChip,
-                openSkillInSidebar: (sessionId, filePath) => openSkillInSidebar(ctx, sessionId, filePath),
-              }),
-            },
-            MirrorBody,
-          ),
-        ),
-      );
-      return () => {
-        for (const stop of stops) {
-          if (typeof stop === 'function') stop();
-        }
-      };
+      return register(tabs);
     }
 
     /**
@@ -3598,14 +3627,25 @@ window.__ModuleLoader__.load({
         // 表示不限会话即可。
         const sessionId = '';
 
-        const sidebarRight = typeof ctx.get === 'function' ? ctx.get('sidebarRight') : undefined;
+        // ⚠️ 不要在这里一次性捕获 `sidebarRight`：它由右侧栏插件 provide，而本插件
+        // 的客户端模块是 stage-one 预取的，apply 可能比它早；捕获成 undefined 之后
+        // 就再也不会有画面。每次展开时现读，服务晚到也能用；打不开留一条 warn，
+        // 不要再静默失败。
         const openPanel = () => {
-          if (sidebarRight && typeof sidebarRight.openTab === 'function') {
+          const sidebarRight = typeof ctx.get === 'function' ? ctx.get('sidebarRight') : undefined;
+          if (!sidebarRight || typeof sidebarRight.openTab !== 'function') {
             try {
-              sidebarRight.openTab(TAB_KIND);
-            } catch {
-              // 没有挂载的会话面时抛错：只留文字提示。
-            }
+              console.warn(`[${PLUGIN_NAME}] 右侧栏服务还没就绪，无法展开画面`);
+            } catch { /* 忽略日志失败 */ }
+            return;
+          }
+          try {
+            sidebarRight.openTab(TAB_KIND);
+          } catch (error) {
+            // 没有挂载的会话面、或 tab 类型没注册上时会抛错。
+            try {
+              console.warn(`[${PLUGIN_NAME}] 展开画面失败：${error instanceof Error ? error.message : String(error)}`);
+            } catch { /* 忽略日志失败 */ }
           }
         };
 
@@ -3626,16 +3666,18 @@ window.__ModuleLoader__.load({
     }
 
     exports.name = PLUGIN_NAME;
-    // `slots` 是硬依赖；`locale` / `sidebarRight` / `sidebarRightTabs` 是可选
-    // 的周边能力，用非严格的 `ctx.get` 读，缺了也能降级。`settingsScope` 走嵌套
-    // inject —— 没有设置服务的 profile 里，胶囊与画面照常工作，只是没有配置卡片。
+    // `slots` 是硬依赖；`locale` / `sidebarRight` 是可选周边能力，用非严格的
+    // `ctx.get` 读，缺了也能降级。`sidebarRightTabs`、`configForms` 走嵌套 inject
+    // —— 它们由别的客户端插件 provide，可能比我们晚就绪；一次性 `ctx.get` 读不到
+    // 就永久放弃，那正是「胶囊在、右侧栏打不开、配置页也不出现」的成因。
     exports.inject = ['slots'];
 
     exports.apply = (ctx, rawConfig) => {
       void rawConfig;
       attachCapsuleAndView(ctx);
       if (typeof ctx.inject === 'function') {
-        ctx.inject(['slots', 'settingsScope'], attachSettings);
+        // `configForms` 是 0.2 的设置通道（旧的 `settingsScope` 已删）。
+        ctx.inject(['slots', 'configForms'], attachSettings);
         // 等 inputTriggers 激活后再注册 codec，发送时才能展开芯片。
         ctx.inject(['inputTriggers'], (trigCtx) => {
           trigCtx.effect(() => attachTabReferenceSource(trigCtx), `${PLUGIN_NAME}: tab reference`);

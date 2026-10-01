@@ -60,6 +60,18 @@ export const name = 'workspace-browser';
  */
 export const inject = [];
 
+/**
+ * 本行的 Config schema。
+ *
+ * 0.2 的 settings 服务不再由插件“登记”namespace：它遍历 Loader 条目，从
+ * `entry.fiber.runtime.Config` 拿 schema，并把 `entry.options.id`（也就是
+ * `cordis.patch.yml` 里的 row id）当作 namespace。所以要让配置界面认识这个插件，
+ * 唯一要做的就是**导出这份 schema**（字段都标了 `.volatile()`，见 lib/settings.js）。
+ *
+ * 同时它还是本行 `config` 的校验器：profile 里写错的键会在加载时直接报错。
+ */
+export const Config = createSettingsSchema();
+
 export { ROUTE_PREFIX, SETTINGS_NAMESPACE };
 
 /**
@@ -211,31 +223,44 @@ export function apply(ctx, config) {
   }
 
   // ── 设置命名空间 ──────────────────────────────────────────────────────────
-  // 嵌套 inject：只有宿主没有 settings 提供方时，插件其余部分照常工作。
+  // 0.2：行不再“登记”namespace —— settings 服务按行 id 描述条目，schema 来自上面
+  // 导出的 `Config`，namespace 就等于 `cordis.patch.yml` 的 row id
+  // （`SETTINGS_NAMESPACE`）。这里只做两件事：把服务引用留给读写用，并声明
+  // 「本行自带页面」（`auto: false`），免得设置页再自动生成一份表单。
   if (typeof ctx.inject === 'function') {
     ctx.inject(['settings'], (settingsCtx) => {
-      const settings = settingsCtx.settings;
-      if (!settings || typeof settings.installSection !== 'function') return;
-      settingsService = settings;
-      try {
-        settings.installSection(settingsCtx, SETTINGS_NAMESPACE, createSettingsSchema(), pluginConfig, {
-          setSource: (current) => {
-            settingsSource = typeof current === 'function' ? current : () => pluginConfig;
-          },
-          onChange: () => {
-            // 真源变了：`settingsSource` 已经是活的读取器，直接通知实例层重新读。
-            info('设置已更新');
-            const settingsNow = readSettings();
-            if (instance.status().state === 'running') {
-              // 跨域等需要重启的键自己会走 `/cross-origin`；这里只记录，不擅自重启。
-              info(`当前跨域开关：${settingsNow.chromeCrossOrigin ? '开' : '关'}`);
-            }
-          },
-        });
-        info(`设置命名空间 "${SETTINGS_NAMESPACE}" 已挂载`);
-      } catch (error) {
-        warn('settings.installSection 失败；设置 → 插件配置 不会显示本插件', error);
-      }
+      settingsCtx.effect(() => {
+        const settings = settingsCtx.settings;
+        settingsService = settings && typeof settings.describe === 'function' ? settings : null;
+        if (settingsService === null) {
+          warn('settings 服务不可用；配置界面不会显示本插件（其余功能照常）');
+          return () => {};
+        }
+        // 活读：每次读设置都问一遍 describe()，用户层改动立刻生效。
+        settingsSource = () => {
+          try {
+            const forms = settingsService.describe();
+            const mine = Array.isArray(forms)
+              ? forms.find((form) => form !== null && typeof form === 'object' && form.ns === SETTINGS_NAMESPACE)
+              : undefined;
+            const value = mine && mine.value;
+            return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : null;
+          } catch (error) {
+            warn('读取设置失败；本次用行配置兜底', error);
+            return null;
+          }
+        };
+        try {
+          const dispose = typeof settings.configure === 'function'
+            ? settings.configure({ auto: false }, ctx.fiber)
+            : undefined;
+          info(`设置命名空间 "${SETTINGS_NAMESPACE}" 已挂载（自带页面）`);
+          return typeof dispose === 'function' ? dispose : () => {};
+        } catch (error) {
+          warn('settings.configure 失败；插件面板不会出现本插件的配置页', error);
+          return () => {};
+        }
+      });
     });
   }
 

@@ -47,7 +47,7 @@
 - **打开浏览器画面**
 - **允许模型操作**：还没授权时出现，见第 6 节
 
-胶囊可以在插件配置里关掉（`capsuleEnabled`，默认开）。
+胶囊可以在插件配置里关掉（`capsuleEnabled`，默认开）——即插件面板里本插件包卡片上的配置区。
 
 ### 会话头部不放按钮
 
@@ -318,7 +318,7 @@ DSH 退出时浏览器默认继续活着（`instance.onDshExit = keep`）。可�
 | 胶囊 | `conversation.input.right` | list。不要碰 `conversation.input.model`，那是模型选择器 |
 | 会话头部 | 不使用 `conversation.session.header.utilities` | 打开画面从胶囊或右侧栏走 |
 | 画面正文 | `sidebar.right.pane.tab`，key = `workspace-browser/mirror` | 先 `sidebarRightTabs.register`，`kind` 为 `workspace-browser-mirror` |
-| 设置卡片 | `settings.plugin.item`，key = 下面的 namespace | 没有这张卡片，设置页里就看不到 |
+| 配置页 | `plugins.bundle.config`，key = 包名 `dsh-helper-plugin-workspace-browser` | 没有这一页，插件面板里本插件的包卡片就是空的 |
 
 `openTab('workspace-browser-mirror')` 会顺带展开整列。正文用 `useTabInfo()` 拿到 `{ sidebar, panel, tab }`，`tab.visible` 表示这张卡片现在看不看得见。
 
@@ -388,7 +388,7 @@ ctx.commands.register({
 })
 ```
 
-设置：`ctx.settings.register('dsh-helper-plugin-workspace-browser', schema)`。namespace 要匹配 `/^[a-z][a-z0-9-]*$/`。存在 `<DSH_HOME>/settings.yaml`。客户端用 `ctx.settingsScope.bind({ namespace })` 读写。界面路径是 **设置 → 插件 → 插件配置**。`plugin-inventory` 只是清单，不是配置页。
+设置（0.2 契约）：宿主那行导出 `Config`（`lib/settings.js` 的 `createSettingsSchema()`，字段都标 `.volatile()` —— settings 服务只投影 volatile 字段，一个都没有的条目会被 `describe()` 整个跳过），namespace 就是 **Loader row id** `workspace-browser`；宿主只声明「本行自带页面」（`ctx.settings.configure({ auto: false }, ctx.fiber)`），读值走 `describe()`、写值走 `update()`。客户端用 `ctx.configForms.get('workspace-browser')` 读写，并把页面注册进 `plugins.bundle.config`（键 = 包名）。界面路径是 **侧边栏「插件」→ 本插件的包卡片**。`plugin-inventory` 只是清单，不是配置页。
 
 `stream*`、`panel*`、`capsule*` 立即生效。`chrome*`、`instance*` 改完要重启实例，并先提示。
 
@@ -484,7 +484,7 @@ Chrome 136 起，调试端口必须配非默认的 `--user-data-dir`。`--remote
 
 ### 配置项
 
-键是扁平的 camelCase，和 `settings.yaml` 里看到的一致。
+键是扁平的 camelCase，和插件面板配置区里看到的一致。
 
 | 键 | 默认 | 说明 |
 | --- | --- | --- |

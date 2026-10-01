@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { compareVersions, MIN_CHROME_VERSION } from '../lib/chrome.js';
-import { createSettingsSchema, FIELD_DEFAULTS, normalizeSettings } from '../lib/settings.js';
+import { createSettingsSchema, derefVolatile, FIELD_DEFAULTS, normalizeSettings } from '../lib/settings.js';
 import { pageTargets } from '../lib/instance.js';
 import {
   appendToWorkspaceGitignore,
@@ -194,8 +194,10 @@ test('设置 schema：可调用且补齐默认值（schemastery 不可用时也�
   const schema = createSettingsSchema();
   assert.equal(typeof schema, 'function');
   const value = schema({});
-  assert.equal(value.capsuleEnabled, FIELD_DEFAULTS.capsuleEnabled);
-  assert.equal(value.chromeCrossOrigin, FIELD_DEFAULTS.chromeCrossOrigin);
+  // 字段都标了 `.volatile()`（0.2 的 settings 服务只投影 volatile 字段），
+  // cordis 会把它们解析成响应式引用，所以按引用读值 —— 正是 derefVolatile 做的。
+  assert.equal(derefVolatile(value.capsuleEnabled), FIELD_DEFAULTS.capsuleEnabled);
+  assert.equal(derefVolatile(value.chromeCrossOrigin), FIELD_DEFAULTS.chromeCrossOrigin);
 });
 
 test('版本比较', () => {

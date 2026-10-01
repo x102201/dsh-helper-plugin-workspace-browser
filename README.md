@@ -59,7 +59,7 @@ dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-
 
 关掉浏览器窗口后，大约半秒内胶囊回到「未启动」，不会自己再打开。再点「启动」会重新起来。判断「运行中」靠的是调试通道能连上并且能列出标签，不是 `endpoint.json` 还在不在。
 
-没找到 Chrome、版本过低、或找到多个候选时，小面板会写出原因，并给出下载、指定 `chrome.exe` 或重新检测。指定路径在 **设置 → 插件 → 插件配置**。
+没找到 Chrome、版本过低、或找到多个候选时，小面板会写出原因，并给出下载、指定 `chrome.exe` 或重新检测。指定路径在**插件面板里本插件的配置区**。
 
 ## 把一句话交给模型
 
@@ -160,7 +160,9 @@ dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-
 
 ## 配置
 
-**设置 → 插件 → 插件配置**。namespace 是 `dsh-helper-plugin-workspace-browser`，写在 `<DSH_HOME>/settings.yaml`。
+**侧边栏「插件」→「已安装」里的 `dsh-helper-plugin-workspace-browser` 卡片**，配置区在描述和「包含的组件」之间。
+
+namespace 是这一行的 **Loader row id** `workspace-browser`（`cordis.patch.yml`）；保存写进 profile 的 `cordis.patch.yml` 用户层，不是 `settings.yaml`。
 
 | 键 | 默认 | 说明 |
 | --- | --- | --- |
@@ -179,7 +181,7 @@ dsh plugin --profile web add link:/absolute/path/to/dsh-helper-plugin-workspace-
 
 画面、胶囊相关的项在点保存后马上生效。用户数据目录、调试端口、跨域和退出行为在下次启动这个浏览器时生效。
 
-设置页里如果看不到本插件，宿主和浏览器两边都要注册同一个 namespace。少一边，那一栏是空的。注册成功时浏览器控制台有一行 `注册插件配置卡片`。
+配置页里如果看不到本插件，两边都要在：宿主那一行导出 `Config`（0.2 的 settings 服务据此描述 namespace），浏览器半边把页面注册进插件面板的 `plugins.bundle.config`（键 = 包名）。少一边，配置区就是空的。挂载成功时浏览器控制台有一行 `注册插件页面`。
 
 ## 给改代码的人
 

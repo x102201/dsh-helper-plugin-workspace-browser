@@ -593,12 +593,14 @@ function makeClientCtx(seats) {
       },
       bind: (namespace) => (key) => locales.get(namespace)?.zh?.[key] ?? key,
     },
-    settingsScope: {
-      bind: () => ({
+    configForms: {
+      get: () => ({
         getSnapshot: () => ({ status: 'ready', value: {}, writable: true, revision: 1, mode: 'host' }),
         subscribe: () => () => {},
         set: async () => {},
+        mutate: async () => {},
       }),
+      whileServed: (_namespaces, register) => register(new Set(['workspace-browser'])),
     },
   };
   const methods = {

@@ -41,6 +41,8 @@ function makeStrictCtx(services, allowed = new Set(), records = { routes: [], ef
     get(name) {
       return services[name];
     },
+    // 真 ctx 上一定有的东西：`settings.configure(policy, ctx.fiber)` 就用到它。
+    fiber: {},
     provide() {},
     set() {},
     on() {
@@ -108,9 +110,13 @@ function mountHost() {
       list: () => [{ id: 'w1', path: 'C:\\work\\alpha', title: 'alpha', sessionIds: ['s1'] }],
     },
     settings: {
-      installSection(owner, ns, schema, entry, hooks) {
-        records.settingsInstalled = { ns, hasSchema: typeof schema === 'function', entry, hooks };
+      // 0.2 契约：namespace 由行 id 决定，schema 由导出的 Config 决定；插件只声明
+      // 「本行自带页面」（auto: false），读值走 describe()、写值走 update()。
+      configure(policy, fiber) {
+        records.settingsConfigured = { policy, fiber };
+        return () => {};
       },
+      describe: () => [{ ns: 'workspace-browser', value: {}, writable: true, revision: 1 }],
       update: async () => {},
     },
   };
@@ -136,8 +142,12 @@ test('宿主半边能在严格 ctx 上挂载（不读未 inject 的属性）', (
   assert.equal(records.routes.length, 1, '应注册恰好一条路由');
   assert.equal(records.routes[0].path, ROUTE_PREFIX);
   assert.equal(records.routes[0].kind, 'prefix');
-  assert.ok(records.settingsInstalled, '应挂上设置命名空间');
-  assert.equal(records.settingsInstalled.ns, 'dsh-helper-plugin-workspace-browser');
+  assert.ok(records.settingsConfigured, '应声明本行自带配置页面');
+  assert.equal(
+    records.settingsConfigured.policy.auto,
+    false,
+    '自带页面的插件必须 auto: false，免得设置页再自动生成一份表单',
+  );
 });
 
 test('宿主半边在严格 ctx 上注册全部 workspace_browser_* 工具，卸载时全部注销', (t) => {
@@ -257,13 +267,15 @@ test('客户端半边能在严格 ctx 上挂载（曾经的 sessionId 崩溃点�
     sidebarRightTabs: { register: () => () => {} },
     sidebarRight: { openTab: () => {} },
     locale: { register: () => {}, bind: () => (key) => key },
-    settingsScope: {
-      bind: () => ({
+    configForms: {
+      // 0.2：每个 namespace（= 行 id）一张共享表单。
+      get: () => ({
         getSnapshot: () => ({ status: 'ready', value: {}, writable: true, revision: 1, mode: 'host' }),
         subscribe: () => () => {},
         set: async () => {},
         mutate: async () => {},
       }),
+      whileServed: (_namespaces, register) => register(new Set(['workspace-browser'])),
     },
   };
   // 客户端会订阅状态仓库（2 秒轮询），所以必须留下 records 并在测试结束卸载 ——
@@ -289,12 +301,12 @@ test('客户端半边能在严格 ctx 上挂载（曾经的 sessionId 崩溃点�
     '会话头部按钮已按用户要求去掉，不该再注册',
   );
 
-  // 设置卡片：没有这张，设置 → 插件 → 插件配置 里就是空的。
-  const settingsSeat = seats.find((seat) => seat.name === 'settings.plugin.item');
-  assert.ok(settingsSeat, '要有插件配置卡片');
+  // 配置页：没有这张，插件面板里本插件的包页面就是空的。
+  const settingsSeat = seats.find((seat) => seat.name === 'plugins.bundle.config');
+  assert.ok(settingsSeat, '要有插件配置页');
   assert.equal(
     settingsSeat.entry.options.key,
     'dsh-helper-plugin-workspace-browser',
-    '卡片的 key 必须等于设置 namespace，否则两份账本对不上',
+    '页面按包名派发到本插件自己的包卡片上',
   );
 });
